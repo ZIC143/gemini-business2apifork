@@ -240,18 +240,19 @@ class GeminiAutomation:
             self._save_screenshot(page, "code_input_missing")
             return {"success": False, "error": "code input not found"}
 
-        # Step 5: 轮询邮件获取验证码（传入发送时间)
+        # Step 5: 轮询邮件获取验证码（3次，每次5秒间隔）
         self._log("info", "📬 等待邮箱验证码...")
-        code = mail_client.poll_for_code(timeout=40, interval=4, since_time=send_time)
+        code = mail_client.poll_for_code(timeout=15, interval=5, since_time=send_time)
 
         if not code:
-            self._log("warning", "⚠️ 验证码超时，尝试重新发送...")
+            self._log("warning", "⚠️ 验证码超时，15秒后重新发送...")
+            time.sleep(15)
             # 更新发送时间（在点击按钮之前记录）
             send_time = datetime.now()
             # 尝试点击重新发送按钮
             if self._click_resend_code_button(page):
-                # 再次轮询验证码
-                code = mail_client.poll_for_code(timeout=40, interval=4, since_time=send_time)
+                # 再次轮询验证码（3次，每次5秒间隔）
+                code = mail_client.poll_for_code(timeout=15, interval=5, since_time=send_time)
                 if not code:
                     self._log("error", "❌ 重新发送后仍未收到验证码")
                     self._save_screenshot(page, "code_timeout_after_resend")
@@ -384,23 +385,16 @@ class GeminiAutomation:
         # 检查是否已经在验证码输入页面
         code_input = page.ele("css:input[jsname='ovqh0b']", timeout=2) or page.ele("css:input[name='pinInput']", timeout=1)
         if code_input:
-            if self._verify_code_send_by_network(page):
-                self._log("info", "✅ 已在验证码输入页面")
-            else:
-                self._log("warning", "⚠️ 未检测到发送请求，但页面已进入验证码输入页")
-            if self._last_send_error:
-                if self._last_send_error == "captcha_check_failed":
-                    self._log("error", "❌ 触发风控，建议更换代理IP")
-                else:
-                    self._log("error", f"❌ 发送失败: {self._last_send_error}")
-                self._stop_listen(page)
-                return False
-            if self._verify_code_send_status(page) is False:
-                self._log("error", "❌ 页面提示发送失败")
-                self._stop_listen(page)
-                return False
             self._stop_listen(page)
-            return True
+            self._log("info", "✅ 已在验证码输入页面")
+
+            # 直接点击重新发送按钮（不管之前是否发送过）
+            if self._click_resend_code_button(page):
+                self._log("info", "✅ 已点击重新发送按钮")
+                return True
+            else:
+                self._log("warning", "⚠️ 未找到重新发送按钮，继续流程")
+                return True
 
         self._stop_listen(page)
         self._log("error", "❌ 未找到发送验证码按钮")
