@@ -282,7 +282,10 @@
 
           <div class="space-y-4">
             <div class="rounded-2xl border border-border bg-card p-4">
-              <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">图像生成</p>
+              <div class="flex items-center gap-2">
+                <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">图像生成</p>
+                <HelpTip text="不建议开启图像生成功能，容易思考不出图，建议用gemini-imagen" />
+              </div>
               <div class="mt-4 space-y-3">
                 <Checkbox v-model="localSettings.image_generation.enabled">
                   启用图像生成
