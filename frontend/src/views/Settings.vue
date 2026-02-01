@@ -27,12 +27,15 @@
             <div class="rounded-2xl border border-border bg-card p-4">
               <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">基础</p>
               <div class="mt-4 space-y-3">
-                <label class="block text-xs text-muted-foreground">API 密钥</label>
+                <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <label class="block">API 密钥</label>
+                  <HelpTip text="支持多个密钥，用逗号分隔。例如: key1,key2,key3" />
+                </div>
                 <input
                   v-model="localSettings.basic.api_key"
                   type="text"
                   class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
-                  placeholder="可选"
+                  placeholder="可选，多个密钥用逗号分隔"
                 />
                 <label class="block text-xs text-muted-foreground">基础地址</label>
                 <input
@@ -123,13 +126,11 @@
             <div class="rounded-2xl border border-border bg-card p-4">
               <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">自动注册/刷新</p>
               <div class="mt-4 space-y-3">
-                <div class="grid grid-cols-2 items-center gap-x-6 gap-y-2">
-                  <div class="flex items-center justify-start gap-2">
-                    <Checkbox v-model="localSettings.basic.browser_headless">
-                      无头浏览器
-                    </Checkbox>
-                    <HelpTip text="无头模式适用于服务器环境（如 Docker）。若注册/刷新失败，建议关闭。" />
-                  </div>
+                <div class="flex items-center justify-between gap-2">
+                  <Checkbox v-model="localSettings.basic.browser_headless">
+                    无头浏览器
+                  </Checkbox>
+                  <HelpTip text="无头模式适用于服务器环境（如 Docker）。若注册/刷新失败，建议关闭。" />
                 </div>
                 <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>浏览器引擎</span>
@@ -279,7 +280,7 @@
 
           <div class="space-y-4">
             <div class="rounded-2xl border border-border bg-card p-4">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center justify-between gap-2">
                 <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">图像生成</p>
                 <HelpTip text="不建议开启图像生成功能，容易思考不出图，建议用gemini-imagen" />
               </div>
