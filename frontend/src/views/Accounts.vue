@@ -580,7 +580,7 @@
               <p class="mt-1 font-mono">cfmail----email----jwtToken</p>
               <p class="mt-1 font-mono">email----password----clientId----refreshToken</p>
               <p class="mt-2">导入后请执行一次"刷新选中"以获取 Cookie。</p>
-              <p class="mt-1">注册失败建议关闭无头浏览器再试</p>
+              <p class="mt-1">注册失败可先切换为 normal 或 silent 再重试</p>
             </div>
             <div v-if="importError" class="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
               {{ importError }}
@@ -894,6 +894,38 @@
                       </p>
                     </div>
 
+                    <div class="space-y-3 rounded-2xl border border-border bg-muted/20 px-4 py-3">
+                      <div>
+                        <p class="text-sm font-medium text-foreground">浏览器模式</p>
+                        <p class="mt-1 text-xs text-muted-foreground">normal 正常窗口；silent 静默最小化（有头但尽量不抢焦点）；headless 无头</p>
+                      </div>
+                      <div class="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          class="rounded-xl border px-3 py-2 text-xs transition-colors"
+                          :class="browserMode === 'normal' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+                          @click="browserMode = 'normal'"
+                        >
+                          normal
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-xl border px-3 py-2 text-xs transition-colors"
+                          :class="browserMode === 'silent' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+                          @click="browserMode = 'silent'"
+                        >
+                          silent
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-xl border px-3 py-2 text-xs transition-colors"
+                          :class="browserMode === 'headless' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+                          @click="browserMode = 'headless'"
+                        >
+                          headless
+                        </button>
+                      </div>
+                    </div>
                     <div class="rounded-2xl border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
                       <p class="mb-2 font-medium text-foreground">说明</p>
                       <ul class="list-inside list-disc space-y-1">
@@ -1290,6 +1322,7 @@ const scheduledRefreshCron = ref('08:00,20:00')
 const refreshCooldownHours = ref(12)
 const verificationCodeResendCount = ref(2)
 const refreshWindowHours = ref(24)
+const browserMode = ref<'normal' | 'silent' | 'headless'>('normal')
 const isLoadingScheduledConfig = ref(false)
 const isSavingScheduledConfig = ref(false)
 const cachedSettings = ref<any>(null)  // 缓存配置以避免重复API调用
@@ -2135,6 +2168,12 @@ const loadScheduledConfig = async () => {
     refreshCooldownHours.value = settings.retry.refresh_cooldown_hours ?? 12
     verificationCodeResendCount.value = settings.retry.verification_code_resend_count ?? 2
     refreshWindowHours.value = settings.basic.refresh_window_hours ?? 24
+    browserMode.value =
+      settings.basic.browser_mode === 'normal' ||
+      settings.basic.browser_mode === 'silent' ||
+      settings.basic.browser_mode === 'headless'
+        ? settings.basic.browser_mode
+        : ((settings.basic.browser_headless ?? false) ? 'headless' : 'normal')
   } catch (error: any) {
     toast.error(error?.message || '加载定时任务配置失败')
   } finally {
@@ -2211,6 +2250,10 @@ const saveScheduledConfig = async () => {
     return
   }
 
+  if (browserMode.value !== 'normal' && browserMode.value !== 'silent' && browserMode.value !== 'headless') {
+    toast.error('浏览器模式必须是 normal / silent / headless')
+    return
+  }
   isSavingScheduledConfig.value = true
   try {
     const normalizedCron = normalizeScheduledCronInput(scheduledRefreshCron.value)
@@ -2221,6 +2264,8 @@ const saveScheduledConfig = async () => {
     settings.retry.refresh_cooldown_hours = refreshCooldownHours.value
     settings.retry.verification_code_resend_count = verificationCodeResendCount.value
     settings.basic.refresh_window_hours = refreshWindowHours.value
+    settings.basic.browser_mode = browserMode.value
+    settings.basic.browser_headless = browserMode.value === 'headless'
     await settingsApi.update(settings)
     cachedSettings.value = settings  // 更新缓存
     scheduledRefreshCron.value = normalizedCron

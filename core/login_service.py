@@ -289,7 +289,9 @@ class LoginService(BaseTaskService[LoginTask]):
         else:
             return {"success": False, "email": account_id, "error": f"不支持的邮件提供商: {mail_provider}"}
 
-        browser_mode = config.basic.browser_mode
+        browser_mode = (config.basic.browser_mode or "").strip().lower()
+        if browser_mode not in ("normal", "silent", "headless"):
+            browser_mode = "headless" if config.basic.browser_headless else "normal"
 
         # 节点预检与切换
         current_node = None

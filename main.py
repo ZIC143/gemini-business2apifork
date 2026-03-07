@@ -511,6 +511,22 @@ logger.info(f"[PROXY] Account operations (register/login/refresh): {PROXY_FOR_AU
 logger.info(f"[PROXY] Chat operations (JWT/session/messages): {PROXY_FOR_CHAT if PROXY_FOR_CHAT else 'disabled'}")
 
 # ---------- 工具函数 ----------
+def _parse_bool(value, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("1", "true", "yes", "y", "on"):
+            return True
+        if lowered in ("0", "false", "no", "n", "off"):
+            return False
+    return default
+
+
 def get_base_url(request: Request) -> str:
     """获取完整的base URL（优先环境变量，否则从请求自动获取）"""
     # 优先使用环境变量
@@ -1745,6 +1761,7 @@ async def admin_get_settings(request: Request):
             "cfmail_domain": config.basic.cfmail_domain,
             "browser_engine": config.basic.browser_engine,
             "browser_mode": config.basic.browser_mode,
+            "browser_headless": config.basic.browser_headless,
             "refresh_window_hours": config.basic.refresh_window_hours,
             "register_default_count": config.basic.register_default_count,
             "register_domain": config.basic.register_domain,
@@ -1820,12 +1837,24 @@ async def admin_update_settings(request: Request, new_settings: dict = Body(...)
         basic.setdefault("cfmail_domain", config.basic.cfmail_domain)
         basic.setdefault("browser_engine", config.basic.browser_engine)
         basic.setdefault("browser_mode", config.basic.browser_mode)
+        basic.setdefault("browser_headless", config.basic.browser_headless)
         basic.setdefault("refresh_window_hours", config.basic.refresh_window_hours)
         basic.setdefault("register_default_count", config.basic.register_default_count)
         basic.setdefault("register_domain", config.basic.register_domain)
         basic.setdefault("image_expire_hours", config.basic.image_expire_hours)
         if not isinstance(basic.get("register_domain"), str):
             basic["register_domain"] = ""
+        browser_mode_raw = basic.get("browser_mode")
+        if browser_mode_raw is not None and str(browser_mode_raw).strip():
+            browser_mode = str(browser_mode_raw).strip().lower()
+            if browser_mode not in ("normal", "silent", "headless"):
+                raise HTTPException(status_code=400, detail="browser_mode 必须是 normal / silent / headless")
+        else:
+            browser_headless = _parse_bool(basic.get("browser_headless"), config.basic.browser_headless)
+            browser_mode = "headless" if browser_headless else "normal"
+        basic["browser_mode"] = browser_mode
+        basic["browser_headless"] = browser_mode == "headless"
+
         basic.pop("duckmail_proxy", None)
         new_settings["basic"] = basic
 

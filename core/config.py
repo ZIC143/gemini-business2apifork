@@ -40,6 +40,14 @@ def _parse_bool(value, default: bool) -> bool:
     return default
 
 
+def _normalize_browser_mode(value, default: str = "normal") -> str:
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("normal", "silent", "headless"):
+            return lowered
+    return default
+
+
 # ==================== 配置模型定义 ====================
 
 class BasicConfig(BaseModel):
@@ -71,7 +79,8 @@ class BasicConfig(BaseModel):
     cfmail_verify_ssl: bool = Field(default=True, description="Cloudflare Mail SSL校验")
     cfmail_domain: str = Field(default="", description="Cloudflare Mail 邮箱域名（可选，留空随机）")
     browser_engine: str = Field(default="dp", description="浏览器引擎")
-    browser_mode: str = Field(default="normal", description="浏览器模式: normal(正常) / silent(静默最小化) / headless(无头)")
+    browser_mode: str = Field(default="normal", description="自动化浏览器模式：normal/silent/headless")
+    browser_headless: bool = Field(default=False, description="兼容字段：自动化浏览器无头模式")
     refresh_window_hours: int = Field(default=1, ge=0, le=168, description="过期刷新窗口（小时）")
     register_default_count: int = Field(default=1, ge=1, description="默认注册数量")
     register_domain: str = Field(default="", description="DuckMail 域名（推荐）")
@@ -256,13 +265,9 @@ class ConfigManager:
             if isinstance(old_proxy_for_chat_bool, bool) and old_proxy_for_chat_bool:
                 proxy_for_chat = old_proxy
 
-        # 处理浏览器模式（向后兼容旧的 browser_headless）
-        browser_mode = basic_data.get("browser_mode")
-        if not browser_mode:
-            old_headless = _parse_bool(basic_data.get("browser_headless"), False)
-            browser_mode = "headless" if old_headless else "normal"
-        if browser_mode not in ("normal", "silent", "headless"):
-            browser_mode = "normal"
+        legacy_headless = _parse_bool(basic_data.get("browser_headless"), False)
+        default_browser_mode = "headless" if legacy_headless else "normal"
+        browser_mode = _normalize_browser_mode(basic_data.get("browser_mode"), default_browser_mode)
 
         basic_config = BasicConfig(
             api_key=basic_data.get("api_key") or "",
@@ -292,6 +297,7 @@ class ConfigManager:
             cfmail_domain=str(basic_data.get("cfmail_domain") or "").strip(),
             browser_engine=basic_data.get("browser_engine") or "dp",
             browser_mode=browser_mode,
+            browser_headless=browser_mode == "headless",
             refresh_window_hours=int(refresh_window_raw),
             register_default_count=int(register_default_raw),
             register_domain=str(register_domain_raw or "").strip(),

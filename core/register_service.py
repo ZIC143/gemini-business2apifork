@@ -181,7 +181,9 @@ class RegisterService(BaseTaskService[RegisterTask]):
 
         log_cb("info", f"✅ 邮箱注册成功: {client.email}")
 
-        browser_mode = config.basic.browser_mode
+        browser_mode = (config.basic.browser_mode or "").strip().lower()
+        if browser_mode not in ("normal", "silent", "headless"):
+            browser_mode = "headless" if config.basic.browser_headless else "normal"
         proxy_for_auth, _ = parse_proxy_setting(config.basic.proxy_for_auth)
 
         # 节点预检与切换

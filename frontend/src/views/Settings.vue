@@ -139,11 +139,12 @@
               <div class="mt-4 space-y-3">
                 <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>浏览器模式</span>
-                  <HelpTip text="正常: 显示窗口；静默: 最小化到任务栏，不抢焦点；无头: 完全无窗口（服务器环境）" />
+                    <HelpTip text="normal=正常窗口；silent=静默最小化到任务栏；headless=无头，适合服务器环境。" />
                 </div>
                 <SelectMenu
                   v-model="localSettings.basic.browser_mode"
                   :options="browserModeOptions"
+                  class="w-full"
                 />
                 <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>浏览器引擎</span>
@@ -599,7 +600,12 @@ watch(settings, (value) => {
   next.basic.duckmail_base_url ||= 'https://api.duckmail.sbs'
   next.basic.duckmail_verify_ssl = next.basic.duckmail_verify_ssl ?? true
   next.basic.browser_engine = next.basic.browser_engine || 'dp'
-  next.basic.browser_mode = next.basic.browser_mode || 'normal'
+  const normalizedBrowserMode =
+    next.basic.browser_mode === 'normal' || next.basic.browser_mode === 'silent' || next.basic.browser_mode === 'headless'
+      ? next.basic.browser_mode
+      : ((next.basic.browser_headless ?? false) ? 'headless' : 'normal')
+  next.basic.browser_mode = normalizedBrowserMode
+  next.basic.browser_headless = normalizedBrowserMode === 'headless'
   next.basic.request_timeout_seconds = Number.isFinite(next.basic.request_timeout_seconds)
     ? next.basic.request_timeout_seconds
     : 600
@@ -679,6 +685,13 @@ const handleSave = async () => {
   isSaving.value = true
 
   try {
+    localSettings.value.basic.browser_mode =
+      localSettings.value.basic.browser_mode === 'normal' ||
+      localSettings.value.basic.browser_mode === 'silent' ||
+      localSettings.value.basic.browser_mode === 'headless'
+        ? localSettings.value.basic.browser_mode
+        : 'normal'
+    localSettings.value.basic.browser_headless = localSettings.value.basic.browser_mode === 'headless'
     await settingsStore.updateSettings(localSettings.value)
     toast.success('设置保存成功')
   } catch (error: any) {
