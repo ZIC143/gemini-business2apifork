@@ -62,62 +62,57 @@ class LoginService(BaseTaskService[LoginTask]):
         self._refresh_timestamps: Dict[str, float] = {}
         # cron 触发记录：避免同一时间点当天重复触发
         self._triggered_today: set = set()
+        # 调度状态：用于间隔模式防漂移与配置变更重置
+        self._last_schedule_expression: Optional[str] = None
+        self._next_interval_due_at: Optional[float] = None
 
-    def _get_running_task(self) -> Optional[LoginTask]:
-        """获取正在运行或等待中的任务"""
+    def _get_active_task(self) -> Optional[LoginTask]:
+        """获取当前唯一活跃任务（running 优先，其次 pending）。"""
+        running: List[LoginTask] = []
+        pending: List[LoginTask] = []
         for task in self._tasks.values():
             if isinstance(task, LoginTask) and task.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
-                return task
+                if task.status == TaskStatus.RUNNING:
+                    running.append(task)
+                else:
+                    pending.append(task)
+        if running:
+            return min(running, key=lambda task: task.created_at)
+        if pending:
+            return min(pending, key=lambda task: task.created_at)
         return None
 
     async def start_login(self, account_ids: List[str]) -> LoginTask:
         """
         启动登录任务 - 统一任务管理
-        - 如果有正在运行的任务，将新账户添加到该任务（去重）
-        - 如果没有正在运行的任务，创建新任务
+        - 同一时间只允许一个刷新任务（running/pending）
+        - 若已有任务活跃，直接返回当前任务，不创建新任务
         """
         async with self._lock:
-            if not account_ids:
+            # 先按调用顺序去重，避免同一请求重复账号
+            normalized_ids: List[str] = []
+            seen = set()
+            for account_id in account_ids:
+                if not account_id or account_id in seen:
+                    continue
+                seen.add(account_id)
+                normalized_ids.append(account_id)
+
+            if not normalized_ids:
                 raise ValueError("账户列表不能为空")
 
-            # 检查是否有正在运行的任务
-            running_task = self._get_running_task()
+            # 单任务模型：若已有活跃任务，直接复用，避免逻辑分叉
+            existing = self._get_active_task()
+            if existing:
+                self._append_log(existing, "info", f"📝 收到新刷新请求({len(normalized_ids)}个账号)，当前仅允许单任务执行，已复用现有任务")
+                return existing
 
-            if running_task:
-                # 将新账户添加到现有任务（去重）
-                new_accounts = [aid for aid in account_ids if aid not in running_task.account_ids]
-
-                if new_accounts:
-                    running_task.account_ids.extend(new_accounts)
-                    self._append_log(
-                        running_task,
-                        "info",
-                        f"📝 添加 {len(new_accounts)} 个账户到现有任务 (总计: {len(running_task.account_ids)})"
-                    )
-                else:
-                    self._append_log(running_task, "info", "📝 所有账户已在当前任务中")
-
-                return running_task
-
-            # 创建新任务
-            task = LoginTask(id=str(uuid.uuid4()), account_ids=list(account_ids))
+            # 创建新任务并入队
+            task = LoginTask(id=str(uuid.uuid4()), account_ids=list(normalized_ids))
             self._tasks[task.id] = task
-            self._append_log(task, "info", f"📝 创建刷新任务 (账号数量: {len(task.account_ids)})")
-
-            # 直接启动任务
-            self._current_task_id = task.id
-            asyncio.create_task(self._run_task_directly(task))
+            self._append_log(task, "info", f"📝 创建刷新任务并入队 (账号数量: {len(task.account_ids)})")
+            await self._enqueue_task(task)
             return task
-
-    async def _run_task_directly(self, task: LoginTask) -> None:
-        """直接执行任务"""
-        try:
-            await self._run_one_task(task)
-        finally:
-            # 任务完成后清理
-            async with self._lock:
-                if self._current_task_id == task.id:
-                    self._current_task_id = None
 
     def _execute_task(self, task: LoginTask):
         return self._run_login_async(task)
@@ -196,7 +191,6 @@ class LoginService(BaseTaskService[LoginTask]):
             task.status = TaskStatus.SUCCESS if task.fail_count == 0 else TaskStatus.FAILED
         task.finished_at = time.time()
         self._append_log(task, "info", f"login task finished ({task.success_count}/{len(task.account_ids)})")
-        self._current_task_id = None
         self._append_log(task, "info", f"🏁 刷新任务完成 (成功: {task.success_count}, 失败: {task.fail_count}, 总计: {len(task.account_ids)})")
 
     def _refresh_one(self, account_id: str, task: LoginTask) -> dict:
@@ -224,8 +218,26 @@ class LoginService(BaseTaskService[LoginTask]):
         mail_tenant = account.get("mail_tenant") or "consumers"
         proxy_for_auth, _ = parse_proxy_setting(config.basic.proxy_for_auth)
 
+        verbose_mail_logs = os.getenv("REFRESH_VERBOSE_MAIL_LOGS", "").strip().lower() in ("1", "true", "yes", "y", "on")
+        noisy_info_tokens = (
+            "http ", "/api/", "query", "请求体", "收到响应", "邮件内容预览",
+            "正在读取邮件", "次轮询", "等待 5 秒后重试",
+        )
+
         def log_cb(level, message):
-            self._append_log(task, level, f"[{account_id}] {message}")
+            normalized_level = (level or "info").lower()
+            text = str(message)
+            if normalized_level == "info":
+                lower_text = text.lower()
+                if any(token in lower_text for token in noisy_info_tokens):
+                    normalized_level = "debug"
+
+            if normalized_level == "debug" and not verbose_mail_logs:
+                if task.cancel_requested:
+                    raise TaskCancelledError(task.cancel_reason or "cancelled")
+                return
+
+            self._append_log(task, normalized_level, f"[{account_id}] {text}")
 
         log_cb("info", f"📧 邮件提供商: {mail_provider}")
 
@@ -423,6 +435,10 @@ class LoginService(BaseTaskService[LoginTask]):
         if os.environ.get("ACCOUNTS_CONFIG"):
             logger.info("[LOGIN] ACCOUNTS_CONFIG set, skipping refresh")
             return None
+        active = self._get_active_task()
+        if active:
+            logger.info("[LOGIN] refresh requested while active task exists, reusing current task")
+            return active
         expiring_accounts = self._get_expiring_accounts()
         if not expiring_accounts:
             logger.debug("[LOGIN] no accounts need refresh")
@@ -435,49 +451,99 @@ class LoginService(BaseTaskService[LoginTask]):
             return None
 
     @staticmethod
-    def _parse_cron(cron_str: str) -> dict:
-        """解析 cron 表达式。
-        支持两种格式:
-          - '08:00,20:00' → {'mode': 'daily', 'times': ['08:00', '20:00']}
-          - '*/120'       → {'mode': 'interval', 'minutes': 120}
-        """
-        cron_str = cron_str.strip()
-        if cron_str.startswith("*/"):
+    def normalize_schedule_expression(cron_str: str) -> str:
+        """规范化调度表达式（只允许 interval 或 daily）。"""
+        raw = (cron_str or "").strip()
+        if not raw:
+            raise ValueError("scheduled_refresh_cron 不能为空")
+
+        if raw.startswith("*/"):
             try:
-                minutes = int(cron_str[2:])
-                return {"mode": "interval", "minutes": max(minutes, 5)}
-            except ValueError:
-                return {"mode": "interval", "minutes": 120}
-        else:
-            times = [t.strip() for t in cron_str.split(",") if t.strip()]
-            valid = []
-            for t in times:
-                parts = t.split(":")
-                if len(parts) == 2:
-                    try:
-                        h, m = int(parts[0]), int(parts[1])
-                        if 0 <= h <= 23 and 0 <= m <= 59:
-                            valid.append(f"{h:02d}:{m:02d}")
-                    except ValueError:
-                        pass
-            return {"mode": "daily", "times": valid or ["08:00", "20:00"]}
+                minutes = int(raw[2:])
+            except ValueError as exc:
+                raise ValueError("间隔模式格式错误，应为 */分钟数") from exc
+            if minutes < 5:
+                raise ValueError("间隔模式最小 5 分钟")
+            return f"*/{minutes}"
+
+        times = [item.strip() for item in raw.split(",") if item.strip()]
+        if not times:
+            raise ValueError("每日模式至少提供一个时间点")
+
+        valid_times: List[str] = []
+        for item in times:
+            parts = item.split(":")
+            if len(parts) != 2:
+                raise ValueError(f"时间格式错误: {item}")
+            try:
+                hour = int(parts[0])
+                minute = int(parts[1])
+            except ValueError as exc:
+                raise ValueError(f"时间格式错误: {item}") from exc
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError(f"时间超出范围: {item}")
+            normalized = f"{hour:02d}:{minute:02d}"
+            if normalized not in valid_times:
+                valid_times.append(normalized)
+        valid_times.sort()
+        return ",".join(valid_times)
+
+    @classmethod
+    def resolve_schedule_expression(cls, cron_str: str, interval_minutes: int = 0) -> str:
+        """解析最终调度表达式（兼容旧字段 scheduled_refresh_interval_minutes）。"""
+        effective = (cron_str or "").strip()
+        if (not effective or effective == "08:00,20:00") and interval_minutes > 0:
+            effective = f"*/{interval_minutes}"
+        if not effective:
+            effective = "08:00,20:00"
+        return cls.normalize_schedule_expression(effective)
+
+    @classmethod
+    def _parse_schedule(cls, cron_str: str) -> dict:
+        """解析调度表达式为运行时结构。"""
+        normalized = cls.normalize_schedule_expression(cron_str)
+        if normalized.startswith("*/"):
+            return {"mode": "interval", "minutes": int(normalized[2:])}
+        times = [item.strip() for item in normalized.split(",") if item.strip()]
+        return {"mode": "daily", "times": times}
 
     async def _wait_for_next_trigger(self) -> None:
         """等待下一个触发时间点。
         - interval 模式：等 N 分钟
         - daily 模式：等到下一个匹配的 HH:MM，每个时间点每天只触发一次
         """
-        cron_str = config.retry.scheduled_refresh_cron
-        # 向后兼容：如果旧字段有值且新字段是默认值，转换为 interval 模式
-        if (not cron_str or cron_str == "08:00,20:00") and config.retry.scheduled_refresh_interval_minutes > 0:
-            cron_str = f"*/{config.retry.scheduled_refresh_interval_minutes}"
+        try:
+            cron_str = self.resolve_schedule_expression(
+                config.retry.scheduled_refresh_cron,
+                config.retry.scheduled_refresh_interval_minutes,
+            )
+            cron = self._parse_schedule(cron_str)
+        except ValueError as exc:
+            logger.error(f"[LOGIN] 定时配置无效，已跳过本轮调度: {exc}")
+            await asyncio.sleep(CONFIG_CHECK_INTERVAL_SECONDS)
+            return
 
-        cron = self._parse_cron(cron_str)
+        # 配置变化时重置 interval 模式调度状态
+        if cron_str != self._last_schedule_expression:
+            self._last_schedule_expression = cron_str
+            self._next_interval_due_at = None
 
         if cron["mode"] == "interval":
             minutes = cron["minutes"]
-            logger.info(f"[LOGIN] 间隔模式：{minutes} 分钟后下一次检查")
-            await asyncio.sleep(minutes * 60)
+            interval_seconds = minutes * 60
+            now_ts = time.time()
+            if self._next_interval_due_at is None:
+                self._next_interval_due_at = now_ts + interval_seconds
+
+            sleep_seconds = self._next_interval_due_at - now_ts
+            if sleep_seconds > 0:
+                logger.info(f"[LOGIN] 间隔模式：{int(sleep_seconds)} 秒后下一次检查")
+                await asyncio.sleep(sleep_seconds)
+            else:
+                logger.info("[LOGIN] 间隔触发点已到（或已过），立即执行本轮检查")
+
+            # 无论是否补触发，都从当前时刻重新计算下一个触发点，避免循环补偿风暴
+            self._next_interval_due_at = time.time() + interval_seconds
             return
 
         # daily 模式：每秒检查一次当前时间是否命中
@@ -502,7 +568,7 @@ class LoginService(BaseTaskService[LoginTask]):
             await asyncio.sleep(30)  # 每 30 秒检查一次
 
     async def _wait_task_complete(self, task: LoginTask) -> None:
-        """等待任务完成（防重复层 3：串行等待）"""
+        """等待任务完成。"""
         while task.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
             await asyncio.sleep(5)
 
@@ -526,41 +592,26 @@ class LoginService(BaseTaskService[LoginTask]):
                 if not self._is_polling:
                     break
 
+                # 单任务模型：若已有活跃任务，先等待完成，避免任何重叠执行
+                active = self._get_active_task()
+                if active:
+                    logger.info("[LOGIN] 检测到已有活跃刷新任务，等待完成后进入下一轮")
+                    await self._wait_task_complete(active)
+                    continue
+
                 # 获取所有待刷新账号（已含冷却过滤）
                 expiring = self._get_expiring_accounts()
                 if not expiring:
                     logger.info("[LOGIN] 本轮无需刷新的账号")
                     continue
 
-                batch_size = config.retry.refresh_batch_size
-                total_batches = (len(expiring) + batch_size - 1) // batch_size
-                logger.info(f"[LOGIN] 待刷新 {len(expiring)} 个账号，分 {total_batches} 批（每批 {batch_size} 个）")
-
-                # 分批执行
-                for i in range(0, len(expiring), batch_size):
-                    if not self._is_polling:
-                        break
-
-                    batch = expiring[i:i + batch_size]
-                    batch_num = i // batch_size + 1
-                    logger.info(f"[LOGIN] 第 {batch_num}/{total_batches} 批: {batch}")
-
-                    try:
-                        task = await self.start_login(batch)
-                        # 等待这批完成（防重复层 3）
-                        await self._wait_task_complete(task)
-                        logger.info(f"[LOGIN] 第 {batch_num} 批完成 (成功: {task.success_count}, 失败: {task.fail_count})")
-                    except Exception as exc:
-                        logger.warning(f"[LOGIN] 第 {batch_num} 批异常: {exc}")
-
-                    # 批次间等待（最后一批不等）
-                    remaining = expiring[i + batch_size:]
-                    if remaining and self._is_polling:
-                        interval = config.retry.refresh_batch_interval_minutes * 60
-                        logger.info(f"[LOGIN] 等待 {config.retry.refresh_batch_interval_minutes} 分钟后开始下一批...")
-                        await asyncio.sleep(interval)
-
-                logger.info("[LOGIN] 本轮刷新完成")
+                logger.info(f"[LOGIN] 本轮待刷新 {len(expiring)} 个账号，按单任务一次性执行")
+                try:
+                    task = await self.start_login(expiring)
+                    await self._wait_task_complete(task)
+                    logger.info(f"[LOGIN] 本轮刷新完成 (成功: {task.success_count}, 失败: {task.fail_count})")
+                except Exception as exc:
+                    logger.warning(f"[LOGIN] 本轮刷新异常: {exc}")
 
         except asyncio.CancelledError:
             logger.info("[LOGIN] polling stopped")

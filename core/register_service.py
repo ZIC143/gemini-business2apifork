@@ -57,18 +57,11 @@ class RegisterService(BaseTaskService[RegisterTask]):
             log_prefix="REGISTER",
         )
 
-    def _get_running_task(self) -> Optional[RegisterTask]:
-        """获取正在运行或等待中的任务"""
-        for task in self._tasks.values():
-            if isinstance(task, RegisterTask) and task.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
-                return task
-        return None
-
     async def start_register(self, count: Optional[int] = None, domain: Optional[str] = None, mail_provider: Optional[str] = None) -> RegisterTask:
         """
         启动注册任务 - 统一任务管理
-        - 如果有正在运行的任务，将新数量添加到该任务
-        - 如果没有正在运行的任务，创建新任务
+        - 每次请求创建独立任务
+        - 所有任务统一进入串行队列执行
         """
         async with self._lock:
             if os.environ.get("ACCOUNTS_CONFIG"):
@@ -90,38 +83,16 @@ class RegisterService(BaseTaskService[RegisterTask]):
             register_count = count or config.basic.register_default_count
             register_count = max(1, int(register_count))
 
-            # 检查是否有正在运行的任务
-            running_task = self._get_running_task()
-
-            if running_task:
-                # 将新数量添加到现有任务
-                running_task.count += register_count
-                self._append_log(
-                    running_task,
-                    "info",
-                    f"📝 添加 {register_count} 个账户到现有任务 (总计: {running_task.count})"
-                )
-                return running_task
-
-            # 创建新任务
+            # 每次都创建新任务，避免运行中动态修改任务目标导致执行数量不准确
             task = RegisterTask(id=str(uuid.uuid4()), count=register_count, domain=domain_value, mail_provider=mail_provider_value)
             self._tasks[task.id] = task
-            self._append_log(task, "info", f"📝 创建注册任务 (数量: {register_count}, 域名: {domain_value or 'default'}, 提供商: {mail_provider_value})")
-
-            # 直接启动任务
-            self._current_task_id = task.id
-            asyncio.create_task(self._run_task_directly(task))
+            self._append_log(
+                task,
+                "info",
+                f"📝 创建注册任务并入队 (数量: {register_count}, 域名: {domain_value or 'default'}, 提供商: {mail_provider_value})"
+            )
+            await self._enqueue_task(task)
             return task
-
-    async def _run_task_directly(self, task: RegisterTask) -> None:
-        """直接执行任务"""
-        try:
-            await self._run_one_task(task)
-        finally:
-            # 任务完成后清理
-            async with self._lock:
-                if self._current_task_id == task.id:
-                    self._current_task_id = None
 
     def _execute_task(self, task: RegisterTask):
         return self._run_register_async(task, task.domain, task.mail_provider)
@@ -173,7 +144,6 @@ class RegisterService(BaseTaskService[RegisterTask]):
         else:
             task.status = TaskStatus.SUCCESS if task.fail_count == 0 else TaskStatus.FAILED
         task.finished_at = time.time()
-        self._current_task_id = None
         self._append_log(task, "info", f"🏁 注册任务完成 (成功: {task.success_count}, 失败: {task.fail_count}, 总计: {task.count})")
 
     def _register_one(self, domain: Optional[str], mail_provider: Optional[str], task: RegisterTask) -> dict:

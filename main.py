@@ -1766,11 +1766,9 @@ async def admin_get_settings(request: Request):
             "session_cache_ttl_seconds": config.retry.session_cache_ttl_seconds,
             "auto_refresh_accounts_seconds": config.retry.auto_refresh_accounts_seconds,
             "scheduled_refresh_enabled": config.retry.scheduled_refresh_enabled,
-            "scheduled_refresh_interval_minutes": config.retry.scheduled_refresh_interval_minutes,
             "scheduled_refresh_cron": config.retry.scheduled_refresh_cron,
-            "refresh_batch_size": config.retry.refresh_batch_size,
-            "refresh_batch_interval_minutes": config.retry.refresh_batch_interval_minutes,
             "refresh_cooldown_hours": config.retry.refresh_cooldown_hours,
+            "verification_code_resend_count": config.retry.verification_code_resend_count,
         },
         "quota_limits": {
             "enabled": config.quota_limits.enabled,
@@ -1846,12 +1844,16 @@ async def admin_update_settings(request: Request, new_settings: dict = Body(...)
         new_settings["video_generation"] = video_generation
 
         retry = dict(new_settings.get("retry") or {})
+        # 已弃用：分批刷新字段不再对外暴露，也不再参与保存
+        retry.pop("refresh_batch_size", None)
+        retry.pop("refresh_batch_interval_minutes", None)
         retry.setdefault("auto_refresh_accounts_seconds", config.retry.auto_refresh_accounts_seconds)
         retry.setdefault("scheduled_refresh_enabled", config.retry.scheduled_refresh_enabled)
         retry.setdefault("scheduled_refresh_interval_minutes", config.retry.scheduled_refresh_interval_minutes)
         retry.setdefault("text_rate_limit_cooldown_seconds", config.retry.text_rate_limit_cooldown_seconds)
         retry.setdefault("images_rate_limit_cooldown_seconds", config.retry.images_rate_limit_cooldown_seconds)
         retry.setdefault("videos_rate_limit_cooldown_seconds", config.retry.videos_rate_limit_cooldown_seconds)
+        retry.setdefault("verification_code_resend_count", config.retry.verification_code_resend_count)
         new_settings["retry"] = retry
 
         # 配额上限配置

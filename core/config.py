@@ -71,7 +71,7 @@ class BasicConfig(BaseModel):
     cfmail_domain: str = Field(default="", description="Cloudflare Mail 邮箱域名（可选，留空随机）")
     browser_engine: str = Field(default="dp", description="浏览器引擎")
     browser_mode: str = Field(default="normal", description="浏览器模式: normal(正常) / silent(静默最小化) / headless(无头)")
-    refresh_window_hours: int = Field(default=1, ge=0, le=24, description="过期刷新窗口（小时）")
+    refresh_window_hours: int = Field(default=1, ge=0, le=168, description="过期刷新窗口（小时）")
     register_default_count: int = Field(default=1, ge=1, description="默认注册数量")
     register_domain: str = Field(default="", description="DuckMail 域名（推荐）")
     image_expire_hours: int = Field(default=12, ge=-1, le=720, description="图片/视频过期时间（小时），-1为永不删除")
@@ -111,11 +111,52 @@ class RetryConfig(BaseModel):
     # 定时刷新配置
     scheduled_refresh_enabled: bool = Field(default=False, description="是否启用定时刷新任务")
     scheduled_refresh_cron: str = Field(default="08:00,20:00", description="刷新时间，如 '08:00,20:00' 或 '*/120'(每120分钟)")
-    refresh_batch_size: int = Field(default=5, ge=1, le=20, description="每批刷新账号数")
-    refresh_batch_interval_minutes: int = Field(default=30, ge=5, le=120, description="批次间等待时间(分钟)")
+    refresh_batch_size: int = Field(default=0, ge=0, le=1000, description="(已弃用) 批次刷新账号数")
+    refresh_batch_interval_minutes: int = Field(default=0, ge=0, le=1440, description="(已弃用) 批次间等待时间(分钟)")
     refresh_cooldown_hours: float = Field(default=12.0, ge=1, le=48, description="同一账号刷新冷却期(小时)")
+    verification_code_resend_count: int = Field(default=2, ge=0, le=5, description="验证码超时后的重发次数")
     # 向后兼容：旧配置可能只有这个字段，读取时自动转换为 */N cron 格式
     scheduled_refresh_interval_minutes: int = Field(default=0, ge=0, le=720, description="(旧字段，已废弃) 定时刷新检测间隔")
+
+    @validator("scheduled_refresh_cron")
+    def validate_scheduled_refresh_cron(cls, v):
+        raw = str(v or "").strip()
+        if not raw:
+            raise ValueError("scheduled_refresh_cron 不能为空")
+
+        # interval 模式：*/N（分钟）
+        if raw.startswith("*/"):
+            try:
+                minutes = int(raw[2:])
+            except ValueError as exc:
+                raise ValueError("scheduled_refresh_cron 间隔模式格式错误，应为 */分钟数") from exc
+            if minutes < 5:
+                raise ValueError("scheduled_refresh_cron 间隔模式最小 5 分钟")
+            return f"*/{minutes}"
+
+        # daily 模式：HH:MM,HH:MM
+        times = [item.strip() for item in raw.split(",") if item.strip()]
+        if not times:
+            raise ValueError("scheduled_refresh_cron 每日模式至少提供一个时间点")
+
+        normalized_times: List[str] = []
+        for item in times:
+            parts = item.split(":")
+            if len(parts) != 2:
+                raise ValueError(f"scheduled_refresh_cron 时间格式错误: {item}")
+            try:
+                hour = int(parts[0])
+                minute = int(parts[1])
+            except ValueError as exc:
+                raise ValueError(f"scheduled_refresh_cron 时间格式错误: {item}") from exc
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError(f"scheduled_refresh_cron 时间超出范围: {item}")
+            normalized = f"{hour:02d}:{minute:02d}"
+            if normalized not in normalized_times:
+                normalized_times.append(normalized)
+
+        normalized_times.sort()
+        return ",".join(normalized_times)
 
 class QuotaLimitsConfig(BaseModel):
     """每日配额上限配置（基于 Google 官方限额，用于主动配额计数）"""

@@ -70,6 +70,7 @@ class GeminiAutomation:
         self._page = None
         self._user_data_dir = None
         self._last_send_error = ""
+        self._last_send_confidence = "unknown"
 
     def stop(self) -> None:
         """外部请求停止：尽力关闭浏览器实例。"""
@@ -354,24 +355,39 @@ class GeminiAutomation:
 
         # Step 5: 轮询邮件获取验证码（3次，每次5秒间隔）
         self._log("info", "📬 等待邮箱验证码...")
-        code = mail_client.poll_for_code(timeout=15, interval=5, since_time=task_start_time)
+        poll_since_time = task_start_time - timedelta(seconds=30)
+        first_timeout = 30 if self._last_send_confidence == "confirmed" else 20
+        self._log("info", f"📬 等待邮箱验证码 (窗口 {first_timeout}s, 发送状态={self._last_send_confidence})")
+        code = mail_client.poll_for_code(timeout=first_timeout, interval=5, since_time=poll_since_time)
 
         if not code:
-            self._log("warning", "⚠️ 验证码超时，等待后重新发送...")
-            time.sleep(random.uniform(12, 18))
-            # 尝试点击重新发送按钮
-            if self._click_resend_code_button(page):
-                # 再次轮询验证码（3次，每次5秒间隔）
-                code = mail_client.poll_for_code(timeout=15, interval=5, since_time=task_start_time)
-                if not code:
-                    self._log("error", "❌ 重新发送后仍未收到验证码")
-                    self._save_screenshot(page, "code_timeout_after_resend")
-                    return {"success": False, "error": "verification code timeout after resend"}
-            else:
-                self._log("error", "❌ 验证码超时且未找到重新发送按钮")
+            from core.config import config
+
+            resend_attempts = int(getattr(config.retry, "verification_code_resend_count", 2) or 0)
+            resend_attempts = max(0, min(5, resend_attempts))
+            if resend_attempts <= 0:
+                self._log("error", "❌ 验证码超时且未启用重发")
                 self._save_screenshot(page, "code_timeout")
                 return {"success": False, "error": "verification code timeout"}
 
+            for resend_index in range(1, resend_attempts + 1):
+                self._log("warning", f"⚠️ 验证码超时，尝试第 {resend_index}/{resend_attempts} 次重发...")
+                time.sleep(random.uniform(1.0, 2.0))
+
+                if not self._click_resend_code_button(page):
+                    self._log("warning", f"⚠️ 未找到重发按钮 ({resend_index}/{resend_attempts})")
+                    continue
+
+                resend_timeout = 25 if self._last_send_confidence == "confirmed" else 15
+                self._log("info", f"📬 已执行重发，继续轮询 (窗口 {resend_timeout}s, 发送状态={self._last_send_confidence}, 第 {resend_index} 次重发)")
+                code = mail_client.poll_for_code(timeout=resend_timeout, interval=5, since_time=poll_since_time)
+                if code:
+                    break
+
+            if not code:
+                self._log("error", "❌ 多次重发后仍未收到验证码")
+                self._save_screenshot(page, "code_timeout_after_resend")
+                return {"success": False, "error": "verification code timeout after resend retries"}
         self._log("info", f"✅ 收到验证码: {code}")
 
         # Step 6: 输入验证码并提交
@@ -478,6 +494,15 @@ class GeminiAutomation:
     def _click_send_code_button(self, page) -> bool:
         """点击发送验证码按钮（如果需要）"""
         time.sleep(random.uniform(1.5, 3))
+        try:
+            page.listen.start(
+                targets=["batchexecute"],
+                is_regex=False,
+                method=("POST",),
+                res_type=("XHR", "FETCH"),
+            )
+        except Exception:
+            pass
         max_send_attempts = 5
         # 适度退避延迟序列（秒）
         retry_delays = [10, 10, 15, 15, 20]
@@ -489,7 +514,7 @@ class GeminiAutomation:
                 try:
                     self._last_send_error = ""
                     self._human_click(page, direct_btn)
-                    if self._verify_code_send_by_network(page) or self._verify_code_send_status(page):
+                    if self._evaluate_send_after_click(page):
                         self._stop_listen(page)
                         return True
                     delay = retry_delays[min(attempt - 1, len(retry_delays) - 1)]
@@ -514,7 +539,7 @@ class GeminiAutomation:
                         try:
                             self._last_send_error = ""
                             self._human_click(page, btn)
-                            if self._verify_code_send_by_network(page) or self._verify_code_send_status(page):
+                            if self._evaluate_send_after_click(page):
                                 self._stop_listen(page)
                                 return True
                             delay = retry_delays[min(attempt - 1, len(retry_delays) - 1)]
@@ -562,6 +587,23 @@ class GeminiAutomation:
         except Exception:
             pass
 
+    def _evaluate_send_after_click(self, page) -> bool:
+        """Evaluate send-code click result with network/UI fallback."""
+        network_ok = self._verify_code_send_by_network(page)
+        ui_state = self._verify_code_send_status(page)
+        if self._last_send_error or ui_state is False:
+            self._last_send_confidence = "failed"
+            return False
+        if network_ok or ui_state is True:
+            self._last_send_confidence = "confirmed"
+            return True
+        code_input = page.ele("css:input[jsname='ovqh0b']", timeout=2) or page.ele("css:input[name='pinInput']", timeout=1)
+        if code_input:
+            self._last_send_confidence = "unknown"
+            return True
+        self._last_send_confidence = "unknown"
+        return False
+
     def _verify_code_send_by_network(self, page) -> bool:
         """通过监听网络请求验证验证码是否成功发送"""
         try:
@@ -587,9 +629,12 @@ class GeminiAutomation:
                 return False
 
             # 保存网络日志（仅用于调试）
-            self._save_network_packets(packets)
+            save_packets = os.getenv("SAVE_NETWORK_PACKETS", "").strip().lower() in ("1", "true", "yes", "y", "on")
+            if save_packets:
+                self._save_network_packets(packets)
 
             found_batchexecute = False
+            found_relevant_packet = False
             found_batchexecute_error = False
 
             for packet in packets:
@@ -600,15 +645,24 @@ class GeminiAutomation:
                         found_batchexecute = True
 
                         try:
+                            request = packet.request if hasattr(packet, 'request') else None
                             response = packet.response if hasattr(packet, 'response') else None
+                            request_body = str(request.postData) if request and hasattr(request, 'postData') else ""
+                            response_body = str(response.raw_body) if response and hasattr(response, 'raw_body') else ""
+                            payload_lower = f"{request_body}\n{response_body}".lower()
+
+                            if any(token in payload_lower for token in ("sendemailotp", "send_email_otp", "emailotp", "otp")):
+                                found_relevant_packet = True
+
                             if response and hasattr(response, 'raw_body'):
-                                body = response.raw_body
-                                raw_body_str = str(body)
+                                raw_body_str = str(response.raw_body)
                                 if "CAPTCHA_CHECK_FAILED" in raw_body_str:
                                     found_batchexecute_error = True
+                                    found_relevant_packet = True
                                     self._last_send_error = "captcha_check_failed"
                                 elif "SendEmailOtpError" in raw_body_str:
                                     found_batchexecute_error = True
+                                    found_relevant_packet = True
                                     self._last_send_error = "send_email_otp_error"
                         except Exception:
                             pass
@@ -616,7 +670,7 @@ class GeminiAutomation:
                 except Exception:
                     continue
 
-            if found_batchexecute:
+            if found_batchexecute and found_relevant_packet:
                 if found_batchexecute_error:
                     return False
                 return True
@@ -626,7 +680,7 @@ class GeminiAutomation:
         except Exception:
             return False
 
-    def _verify_code_send_status(self, page) -> bool:
+    def _verify_code_send_status(self, page) -> Optional[bool]:
         """检测页面提示判断是否发送成功"""
         time.sleep(random.uniform(1.5, 3))
         try:
@@ -658,9 +712,9 @@ class GeminiAutomation:
                             return True
                 except Exception:
                     continue
-            return True
+            return None
         except Exception:
-            return True
+            return None
 
     def _truncate_text(self, text: str, max_len: int = 2000) -> str:
         if text is None:
@@ -802,6 +856,15 @@ class GeminiAutomation:
     def _click_resend_code_button(self, page) -> bool:
         """点击重新发送验证码按钮"""
         time.sleep(random.uniform(1.5, 3))
+        try:
+            page.listen.start(
+                targets=["batchexecute"],
+                is_regex=False,
+                method=("POST",),
+                res_type=("XHR", "FETCH"),
+            )
+        except Exception:
+            pass
 
         # 查找包含重新发送关键词的按钮（与 _find_verify_button 相反）
         try:
@@ -812,13 +875,25 @@ class GeminiAutomation:
                     try:
                         self._log("info", f"🔄 点击重新发送按钮")
                         self._human_click(page, btn)
-                        time.sleep(random.uniform(1.5, 3))
+                        network_ok = self._verify_code_send_by_network(page)
+                        ui_state = self._verify_code_send_status(page)
+                        if self._last_send_error or ui_state is False:
+                            self._last_send_confidence = "failed"
+                            self._stop_listen(page)
+                            return False
+                        if network_ok or ui_state is True:
+                            self._last_send_confidence = "confirmed"
+                        else:
+                            self._last_send_confidence = "unknown"
+                        self._stop_listen(page)
                         return True
                     except Exception:
                         pass
         except Exception:
             pass
 
+        self._last_send_confidence = "failed"
+        self._stop_listen(page)
         return False
 
     def _check_access_restricted(self, page, email: str = "") -> dict | None:

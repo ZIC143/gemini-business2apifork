@@ -78,13 +78,13 @@ cd gemini-business2api
 cp .env.example .env
 # 编辑 .env 设置 ADMIN_KEY
 
-docker-compose up -d
+docker compose up -d
 
 # 查看日志
-docker-compose logs -f
+docker compose logs -f
 
 # 更新到最新版本
-docker-compose pull && docker-compose up -d
+docker compose pull && docker compose up -d
 ```
 
 ---
@@ -233,7 +233,7 @@ curl http://localhost:7860/v1/chat/completions \
 
 ## 📧 邮箱提供商配置
 
-项目支持 4 种临时邮箱，用于自动注册账号。在 **管理面板 → 系统设置 → 临时邮箱提供商** 中切换。
+项目支持 5 种临时邮箱，用于自动注册账号。在 **管理面板 → 系统设置 → 临时邮箱提供商** 中切换。
 
 ### Moemail（默认推荐）
 
@@ -264,6 +264,19 @@ curl http://localhost:7860/v1/chat/completions \
 
 - **项目地址**：[github.com/idinging/freemail](https://github.com/idinging/freemail)
 - **配置项**：自部署服务地址 + JWT Token + 域名（可选）
+
+### Cloudflare Mail（CFMail）
+
+基于 Cloudflare 的临时邮箱服务，适合希望自建或轻量部署的用户。
+
+- **项目地址**：[github.com/dreamhunter2333/cloudflare_temp_email](https://github.com/dreamhunter2333/cloudflare_temp_email)
+- **管理面板配置路径**：系统设置 → 临时邮箱提供商选择 `cfmail`
+- **配置项**：
+  - Cloudflare Mail API 地址（`cfmail_base_url`）
+  - 访问密码（`cfmail_api_key`，实例未启用可留空）
+  - 邮箱域名（`cfmail_domain`，可选，不带 `@`）
+- **导入格式（可选）**：`cfmail----you@example.com----jwtToken`
+  - 第三个字段是该邮箱的 JWT Token（用于拉取邮件验证码）
 
 > **提示**：所有邮箱配置均在管理面板中完成，无需手动编辑配置文件。Microsoft 邮箱登录也在管理面板中操作。
 
@@ -319,7 +332,7 @@ git clone -b refresh-worker https://github.com/Dreamy-rain/gemini-business2api.g
 cd gemini-refresh-worker
 cp .env.example .env
 # 编辑 .env 设置 DATABASE_URL
-docker-compose up -d
+docker compose up -d
 ```
 
 该服务从数据库读取账号，独立执行定时刷新，支持 cron 调度、分批执行、冷却防重复。适合需要刷新服务与 API 服务分离部署的场景。
@@ -382,6 +395,14 @@ python scripts/download_mihomo.py
     <td><img src="docs/img/img_4.png" alt="图片效果 4" /></td>
   </tr>
 </table>
+
+### QQ交流群
+
+扫码加入 QQ 交流群：
+
+<p>
+  <img src="docs/img/qq.png" alt="QQ交流群二维码" width="360" />
+</p>
 
 ### 更多文档
 

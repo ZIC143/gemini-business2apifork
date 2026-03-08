@@ -77,6 +77,13 @@
       </button>
       <button
         class="rounded-full px-4 py-2 text-xs font-medium transition-colors"
+        :class="detailMode === 'summary' ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'"
+        @click="toggleDetailMode"
+      >
+        {{ detailMode === 'summary' ? '摘要模式' : '详情模式' }}
+      </button>
+      <button
+        class="rounded-full px-4 py-2 text-xs font-medium transition-colors"
         :class="autoRefreshEnabled ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'"
         @click="toggleAutoRefresh"
       >
@@ -111,6 +118,9 @@
       ref="structuredLogContainer"
       class="scrollbar-slim mt-4 max-h-[60vh] space-y-3 overflow-y-auto rounded-2xl border border-border bg-card px-4 py-3"
     >
+      <div v-if="detailMode === 'summary'" class="text-[11px] text-muted-foreground">
+        摘要模式仅保留关键事件（开始、结束、失败、切换、告警）。
+      </div>
       <div v-if="structuredView.ungrouped.length === 0 && structuredView.groups.length === 0" class="text-xs text-muted-foreground">
         暂无日志
       </div>
@@ -248,6 +258,7 @@ const confirmOpen = ref(false)
 const autoRefreshEnabled = ref(true)
 const collapsedState = ref<Record<string, boolean>>({})
 const rawView = ref(true)
+const detailMode = ref<'summary' | 'detail'>('summary')
 const hideTaskLogs = ref(true)
 const rawLogContainer = ref<HTMLDivElement | null>(null)
 const structuredLogContainer = ref<HTMLDivElement | null>(null)
@@ -375,6 +386,76 @@ const parseLogTime = (value: string) => {
   return null
 }
 
+const SUMMARY_KEYWORDS = [
+  '开始',
+  '启动',
+  '完成',
+  '成功',
+  '失败',
+  'error',
+  'warning',
+  '超时',
+  'timeout',
+  '切换账户',
+  'rate limit',
+  '403',
+  'access restricted',
+  'cancel',
+  'send code',
+  '验证码',
+  '创建刷新任务',
+  '创建注册任务',
+  'task started',
+  'task finished',
+]
+
+const messageHasSummaryKeyword = (message: string) => {
+  const lower = message.toLowerCase()
+  return SUMMARY_KEYWORDS.some(keyword => lower.includes(keyword))
+}
+
+const isSummaryEvent = (log: ParsedLogEntry) => {
+  if (log.level === 'ERROR' || log.level === 'CRITICAL' || log.level === 'WARNING') {
+    return true
+  }
+  if (log.reqId && messageHasSummaryKeyword(log.message)) {
+    return true
+  }
+  if (log.message.includes('[REFRESH]') || log.message.includes('[REGISTER]')) {
+    return messageHasSummaryKeyword(log.message)
+  }
+  return messageHasSummaryKeyword(log.message)
+}
+
+const compactGroupLogsForSummary = (group: GroupedLog) => {
+  const logs = group.logs
+  if (!logs.length) return []
+
+  const selected: ParsedLogEntry[] = []
+  selected.push(logs[0])
+  for (let i = 1; i < logs.length - 1; i += 1) {
+    const log = logs[i]
+    if (isSummaryEvent(log)) {
+      selected.push(log)
+    }
+  }
+  if (logs.length > 1) {
+    selected.push(logs[logs.length - 1])
+  }
+
+  const deduped: ParsedLogEntry[] = []
+  const seen = new Set<string>()
+  for (const log of selected) {
+    const key = `${log.time}|${log.level}|${log.message}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(log)
+  }
+
+  if (deduped.length <= 50) return deduped
+  return [deduped[0], ...deduped.slice(-49)]
+}
+
 const getGroupStatus = (groupLogs: LogEntry[]) => {
   const lastLog = groupLogs[groupLogs.length - 1]
   const lastMessage = lastLog.message
@@ -438,30 +519,47 @@ const isTaskLog = (message: string) =>
   TASK_LOG_PREFIXES.some(prefix => message.includes(prefix))
 
 const structuredView = computed(() => {
-  const ungrouped = groupedLogs.value.ungrouped
-  const groups = groupedLogs.value.groups
-  const limitedUngrouped = ungrouped.length > structuredRenderLimit
-    ? ungrouped.slice(-structuredRenderLimit)
-    : ungrouped
-  const limitedGroups = groups.length > structuredRenderLimit
-    ? groups.slice(-structuredRenderLimit)
-    : groups
+  const sourceUngrouped = groupedLogs.value.ungrouped
+  const sourceGroups = groupedLogs.value.groups
+
+  const displayUngrouped = detailMode.value === 'summary'
+    ? sourceUngrouped.filter(isSummaryEvent)
+    : sourceUngrouped
+
+  const displayGroups = detailMode.value === 'summary'
+    ? sourceGroups
+      .map(group => ({
+        ...group,
+        logs: compactGroupLogsForSummary(group),
+      }))
+      .filter(group => group.logs.length > 0)
+    : sourceGroups
+
+  const limitedUngrouped = displayUngrouped.length > structuredRenderLimit
+    ? displayUngrouped.slice(-structuredRenderLimit)
+    : displayUngrouped
+  const limitedGroups = displayGroups.length > structuredRenderLimit
+    ? displayGroups.slice(-structuredRenderLimit)
+    : displayGroups
 
   return {
     ungrouped: limitedUngrouped,
     groups: limitedGroups,
-    limited: ungrouped.length > limitedUngrouped.length || groups.length > limitedGroups.length,
-    ungroupedTotal: ungrouped.length,
-    groupsTotal: groups.length,
+    limited: displayUngrouped.length > limitedUngrouped.length || displayGroups.length > limitedGroups.length,
+    ungroupedTotal: displayUngrouped.length,
+    groupsTotal: displayGroups.length,
     ungroupedShowing: limitedUngrouped.length,
     groupsShowing: limitedGroups.length,
   }
 })
 
 const rawLogView = computed(() => {
-  const total = parsedLogs.value.length
+  const source = detailMode.value === 'summary'
+    ? parsedLogs.value.filter(isSummaryEvent)
+    : parsedLogs.value
+  const total = source.length
   const startIndex = total > rawRenderLimit ? total - rawRenderLimit : 0
-  const slice = parsedLogs.value.slice(startIndex)
+  const slice = source.slice(startIndex)
   const text = slice.map(log => `${log.time} | ${log.level} | ${log.message}`).join('\n')
   const showing = slice.length
   return {
@@ -588,6 +686,12 @@ const toggleAutoRefresh = () => {
   }
 }
 
+const toggleDetailMode = () => {
+  detailMode.value = detailMode.value === 'summary' ? 'detail' : 'summary'
+  localStorage.setItem('log-detail-mode', detailMode.value)
+  requestAnimationFrame(scrollToBottom)
+}
+
 const toggleView = () => {
   rawView.value = !rawView.value
   requestAnimationFrame(scrollToBottom)
@@ -618,6 +722,10 @@ onMounted(() => {
     } catch {
       collapsedState.value = {}
     }
+  }
+  const savedDetailMode = localStorage.getItem('log-detail-mode')
+  if (savedDetailMode === 'summary' || savedDetailMode === 'detail') {
+    detailMode.value = savedDetailMode
   }
   fetchLogs()
   startAutoRefresh()
