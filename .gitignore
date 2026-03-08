@@ -17,6 +17,8 @@ build/
 data/
 *.db
 *.sqlite3
+frontend/
+static/
 
 # IDE
 .vscode/

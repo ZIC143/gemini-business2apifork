@@ -2,7 +2,7 @@
 Simplified configuration for the refresh worker.
 
 Only includes refresh-related fields from BasicConfig and RetryConfig.
-Loads from database via storage.load_settings_sync().
+Loads from storage backend via storage.load_settings_sync().
 """
 
 import os
@@ -34,6 +34,22 @@ def _parse_bool(value, default: bool) -> bool:
     return default
 
 
+def _normalize_browser_mode(value, default: str = "normal") -> str:
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("normal", "silent", "headless"):
+            return lowered
+    return default
+
+
+def _normalize_temp_mail_provider(value, default: str = "duckmail") -> str:
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("moemail", "duckmail", "freemail", "gptmail"):
+            return lowered
+    return default
+
+
 # ==================== Config models ====================
 
 class BasicConfig(BaseModel):
@@ -42,7 +58,7 @@ class BasicConfig(BaseModel):
     duckmail_base_url: str = Field(default="https://api.duckmail.sbs", description="DuckMail API地址")
     duckmail_api_key: str = Field(default="", description="DuckMail API key")
     duckmail_verify_ssl: bool = Field(default=True, description="DuckMail SSL校验")
-    temp_mail_provider: str = Field(default="moemail", description="临时邮箱提供商")
+    temp_mail_provider: str = Field(default="duckmail", description="临时邮箱提供商")
     moemail_base_url: str = Field(default="https://moemail.nanohajimi.mom", description="Moemail API地址")
     moemail_api_key: str = Field(default="", description="Moemail API key")
     moemail_domain: str = Field(default="", description="Moemail 邮箱域名")
@@ -55,16 +71,18 @@ class BasicConfig(BaseModel):
     gptmail_api_key: str = Field(default="gpt-test", description="GPTMail API key")
     gptmail_verify_ssl: bool = Field(default=True, description="GPTMail SSL校验")
     gptmail_domain: str = Field(default="", description="GPTMail 邮箱域名")
-    browser_headless: bool = Field(default=False, description="浏览器无头模式")
+    browser_mode: str = Field(default="normal", description="浏览器模式：normal / silent / headless")
+    browser_headless: bool = Field(default=False, description="兼容字段：是否无头模式")
     refresh_window_hours: int = Field(default=1, ge=0, le=24, description="过期刷新窗口（小时）")
     register_domain: str = Field(default="", description="注册账号使用的邮箱域名（DuckMail专用）")
-    register_default_count: int = Field(default=1, ge=1, le=20, description="默认注册账号数量")
+    register_default_count: int = Field(default=20, ge=1, description="默认注册账号数量")
 
 
 class RetryConfig(BaseModel):
     """Refresh-related retry config"""
     scheduled_refresh_enabled: bool = Field(default=False, description="是否启用定时刷新任务")
     scheduled_refresh_cron: str = Field(default="08:00,20:00", description="刷新时间，如 '08:00,20:00' 或 '*/120'(每120分钟)")
+    verification_code_resend_count: int = Field(default=2, ge=0, le=5, description="verification code resend attempts")
     refresh_batch_size: int = Field(default=5, ge=1, le=20, description="每批刷新账号数")
     refresh_batch_interval_minutes: int = Field(default=30, ge=5, le=120, description="批次间等待时间(分钟)")
     refresh_cooldown_hours: float = Field(default=12.0, ge=1, le=48, description="同一账号刷新冷却期(小时)")
@@ -90,10 +108,11 @@ class ConfigManager:
         self.load()
 
     def load(self):
-        """Load config from database."""
+        """Load config from storage backend."""
         yaml_data = self._load_from_db()
 
         basic_data = yaml_data.get("basic", {})
+        storage_mode = storage.get_storage_mode()
 
         # Compat: migrate old proxy field
         old_proxy = basic_data.get("proxy", "")
@@ -103,12 +122,17 @@ class ConfigManager:
             if isinstance(old_proxy_for_auth_bool, bool) and old_proxy_for_auth_bool:
                 proxy_for_auth = old_proxy
 
+        legacy_headless = _parse_bool(basic_data.get("browser_headless"), False)
+        default_browser_mode = "headless" if legacy_headless else "normal"
+        browser_mode = _normalize_browser_mode(basic_data.get("browser_mode"), default_browser_mode)
+        browser_headless = browser_mode == "headless"
+
         basic_config = BasicConfig(
             proxy_for_auth=str(proxy_for_auth or "").strip(),
             duckmail_base_url=basic_data.get("duckmail_base_url") or "https://api.duckmail.sbs",
             duckmail_api_key=str(basic_data.get("duckmail_api_key") or "").strip(),
             duckmail_verify_ssl=_parse_bool(basic_data.get("duckmail_verify_ssl"), True),
-            temp_mail_provider=basic_data.get("temp_mail_provider") or "moemail",
+            temp_mail_provider=basic_data.get("temp_mail_provider") or "duckmail",
             moemail_base_url=basic_data.get("moemail_base_url") or "https://moemail.nanohajimi.mom",
             moemail_api_key=str(basic_data.get("moemail_api_key") or "").strip(),
             moemail_domain=str(basic_data.get("moemail_domain") or "").strip(),
@@ -121,11 +145,25 @@ class ConfigManager:
             gptmail_api_key=str(basic_data.get("gptmail_api_key") or "").strip(),
             gptmail_verify_ssl=_parse_bool(basic_data.get("gptmail_verify_ssl"), True),
             gptmail_domain=str(basic_data.get("gptmail_domain") or "").strip(),
-            browser_headless=_parse_bool(basic_data.get("browser_headless"), False),
+            browser_mode=browser_mode,
+            browser_headless=browser_headless,
             refresh_window_hours=int(basic_data.get("refresh_window_hours", 1)),
             register_domain=str(basic_data.get("register_domain") or "").strip(),
-            register_default_count=max(1, int(basic_data.get("register_default_count", 1))),
+            register_default_count=max(1, int(basic_data.get("register_default_count", 20))),
         )
+
+        # Remote mode safe default:
+        # Do not blindly reuse remote project's proxy_for_auth on local worker,
+        # because remote-side localhost proxies (e.g. 127.0.0.1:7890) are usually
+        # unreachable from this machine and can cause "cannot access Google".
+        use_remote_proxy = _parse_bool(os.getenv("REMOTE_PROJECT_USE_REMOTE_PROXY_FOR_AUTH"), False)
+        if storage_mode == "remote" and os.getenv("PROXY_FOR_AUTH") is None and not use_remote_proxy:
+            if basic_config.proxy_for_auth:
+                logger.warning(
+                    "[CONFIG] remote mode: ignoring remote proxy_for_auth=%s; set local PROXY_FOR_AUTH to enable proxy",
+                    basic_config.proxy_for_auth,
+                )
+            basic_config.proxy_for_auth = ""
 
         try:
             retry_config = RetryConfig(**yaml_data.get("retry", {}))
@@ -135,7 +173,7 @@ class ConfigManager:
 
         self._config = WorkerConfig(basic=basic_config, retry=retry_config)
 
-        # Apply environment variable overrides (take precedence over DB values)
+        # Apply environment variable overrides (take precedence over storage values)
         self._apply_env_overrides()
 
     def _apply_env_overrides(self) -> None:
@@ -164,16 +202,48 @@ class ConfigManager:
             except ValueError:
                 logger.warning("[CONFIG] invalid REFRESH_WINDOW_HOURS=%r, ignored", env_window)
 
+        env_browser_mode = os.getenv("BROWSER_MODE")
+        if env_browser_mode is not None:
+            mode = _normalize_browser_mode(env_browser_mode, self._config.basic.browser_mode)
+            if mode != env_browser_mode.strip().lower():
+                logger.warning(
+                    "[CONFIG] invalid BROWSER_MODE=%r, fallback to %s",
+                    env_browser_mode,
+                    mode,
+                )
+            self._config.basic.browser_mode = mode
+            self._config.basic.browser_headless = mode == "headless"
+            logger.info("[CONFIG] env override: BROWSER_MODE=%s", mode)
+
         env_headless = os.getenv("BROWSER_HEADLESS")
         if env_headless is not None:
-            val = _parse_bool(env_headless, self._config.basic.browser_headless)
-            self._config.basic.browser_headless = val
-            logger.info("[CONFIG] env override: BROWSER_HEADLESS=%s", val)
+            if env_browser_mode is not None:
+                logger.info("[CONFIG] BROWSER_HEADLESS ignored because BROWSER_MODE is set")
+            else:
+                val = _parse_bool(env_headless, self._config.basic.browser_headless)
+                self._config.basic.browser_headless = val
+                self._config.basic.browser_mode = "headless" if val else "normal"
+                logger.info("[CONFIG] env override: BROWSER_HEADLESS=%s", val)
 
         env_proxy = os.getenv("PROXY_FOR_AUTH")
         if env_proxy is not None:
             self._config.basic.proxy_for_auth = env_proxy.strip()
             logger.info("[CONFIG] env override: PROXY_FOR_AUTH=%s", "***" if env_proxy.strip() else "(empty)")
+
+        env_temp_mail_provider = os.getenv("TEMP_MAIL_PROVIDER")
+        if env_temp_mail_provider is not None:
+            provider = _normalize_temp_mail_provider(
+                env_temp_mail_provider,
+                self._config.basic.temp_mail_provider,
+            )
+            if provider != env_temp_mail_provider.strip().lower():
+                logger.warning(
+                    "[CONFIG] invalid TEMP_MAIL_PROVIDER=%r, fallback to %s",
+                    env_temp_mail_provider,
+                    provider,
+                )
+            self._config.basic.temp_mail_provider = provider
+            logger.info("[CONFIG] env override: TEMP_MAIL_PROVIDER=%s", provider)
 
         env_delete_expired = os.getenv("DELETE_EXPIRED_ACCOUNTS")
         if env_delete_expired is not None:
@@ -204,18 +274,21 @@ class ConfigManager:
         env_register_count = os.getenv("REGISTER_DEFAULT_COUNT")
         if env_register_count is not None:
             try:
-                val = max(1, min(20, int(env_register_count)))
+                val = max(1, int(env_register_count))
                 self._config.basic.register_default_count = val
                 logger.info("[CONFIG] env override: REGISTER_DEFAULT_COUNT=%d", val)
             except ValueError:
                 logger.warning("[CONFIG] invalid REGISTER_DEFAULT_COUNT=%r, ignored", env_register_count)
 
     def _load_from_db(self) -> dict:
-        """Load config from database (allows empty config)."""
+        """Load config from storage backend (database or remote project)."""
         if storage.is_database_enabled():
             try:
                 data = storage.load_settings_sync()
                 if data is None:
+                    mode = storage.get_storage_mode()
+                    if mode == "remote":
+                        raise RuntimeError("Remote project settings unavailable")
                     logger.warning("[WARN] No settings found (empty DB or connection issue), using defaults")
                     return {}
                 if isinstance(data, dict):
@@ -228,10 +301,10 @@ class ConfigManager:
                 raise RuntimeError(f"Database load failed: {e}")
 
         logger.error("[ERROR] Database not enabled")
-        raise RuntimeError("DATABASE_URL not configured, worker cannot start")
+        raise RuntimeError("DATABASE_URL or REMOTE_PROJECT_BASE_URL not configured, worker cannot start")
 
     def reload(self):
-        """Hot-reload config from database."""
+        """Hot-reload config from storage backend."""
         self.load()
 
     @property

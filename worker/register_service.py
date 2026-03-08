@@ -3,6 +3,7 @@
 """
 import logging
 import time
+import threading
 from typing import Optional, Callable
 
 from worker.config import config_manager
@@ -12,6 +13,26 @@ from worker.proxy_utils import parse_proxy_setting
 from worker import storage
 
 logger = logging.getLogger("worker.register")
+_active_automation_lock = threading.Lock()
+_active_automation: Optional[GeminiAutomation] = None
+
+
+def _set_active_automation(instance: Optional[GeminiAutomation]) -> None:
+    global _active_automation
+    with _active_automation_lock:
+        _active_automation = instance
+
+
+def stop_active_automation() -> None:
+    """Best-effort stop for current registration browser automation."""
+    with _active_automation_lock:
+        instance = _active_automation
+    if instance is None:
+        return
+    try:
+        instance.stop()
+    except Exception:
+        pass
 
 
 def register_one(
@@ -77,23 +98,34 @@ def register_one(
 
     _log("info", f"✅ 邮箱注册成功: {client.email}")
 
+    browser_mode = (cfg.basic.browser_mode or "normal").strip().lower()
     headless = cfg.basic.browser_headless
     proxy_for_auth, _ = parse_proxy_setting(cfg.basic.proxy_for_auth)
 
-    _log("info", f"🌐 步骤 2/3: 启动浏览器 (无头模式={headless})...")
+    _log("info", f"🌐 步骤 2/3: 启动浏览器 (模式={browser_mode}, 无头={headless})...")
 
     automation = GeminiAutomation(
         proxy=proxy_for_auth,
-        headless=headless,
+        browser_mode=browser_mode,
         log_callback=_log,
     )
 
     try:
+        _set_active_automation(automation)
         _log("info", "🔐 步骤 3/3: 执行 Gemini 自动登录...")
         result = automation.login_and_extract(client.email, client, is_new_account=True)
+    except KeyboardInterrupt:
+        _log("warning", "⚠️ 收到中断信号，正在关闭浏览器...")
+        try:
+            automation.stop()
+        except Exception:
+            pass
+        raise
     except Exception as exc:
         _log("error", f"❌ 自动登录异常: {exc}")
         return {"success": False, "error": str(exc)}
+    finally:
+        _set_active_automation(None)
 
     if not result.get("success"):
         error = result.get("error", "自动化流程失败")

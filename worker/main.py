@@ -1,7 +1,7 @@
 """
 gemini-refresh-worker entry point.
 
-- Loads environment variables, initializes database
+- Loads environment variables, initializes storage backend
 - Installs child_reaper (cleans up Chromium zombie processes)
 - Starts the async polling loop (RefreshService.start_polling)
 - Optionally starts a minimal HTTP health check server
@@ -77,20 +77,21 @@ async def main() -> None:
     else:
         logger.info("[INIT] child reaper not needed (non-POSIX or no SIGCHLD)")
 
-    # Initialize storage (triggers DB connection / table creation)
+    # Initialize storage backend (database or remote project)
     from worker import storage
     if not storage.is_database_enabled():
-        logger.error("[INIT] DATABASE_URL not configured, cannot start")
+        logger.error("[INIT] storage backend not configured, set DATABASE_URL or REMOTE_PROJECT_BASE_URL")
         sys.exit(1)
-    logger.info("[INIT] database backend: %s", storage._get_backend())
+    logger.info("[INIT] storage backend: %s", storage.get_storage_mode())
 
-    # Initialize config (reads from DB)
+    # Initialize config (reads from storage backend)
     # This import triggers ConfigManager.__init__ which calls storage
     from worker.config import config
     logger.info(
-        "[INIT] config loaded — scheduled_refresh_enabled=%s, interval=%d min, headless=%s, window=%dh",
+        "[INIT] config loaded — scheduled_refresh_enabled=%s, interval=%d min, browser_mode=%s, headless=%s, window=%dh",
         config.retry.scheduled_refresh_enabled,
         config.retry.scheduled_refresh_interval_minutes,
+        config.basic.browser_mode,
         config.basic.browser_headless,
         config.basic.refresh_window_hours,
     )
@@ -108,6 +109,8 @@ async def main() -> None:
         env_overrides.append(f"REFRESH_INTERVAL_MINUTES={os.getenv('REFRESH_INTERVAL_MINUTES')}")
     if os.getenv("REFRESH_WINDOW_HOURS") is not None:
         env_overrides.append(f"REFRESH_WINDOW_HOURS={os.getenv('REFRESH_WINDOW_HOURS')}")
+    if os.getenv("BROWSER_MODE") is not None:
+        env_overrides.append(f"BROWSER_MODE={os.getenv('BROWSER_MODE')}")
     if os.getenv("BROWSER_HEADLESS") is not None:
         env_overrides.append(f"BROWSER_HEADLESS={os.getenv('BROWSER_HEADLESS')}")
     if os.getenv("PROXY_FOR_AUTH") is not None:
@@ -122,6 +125,18 @@ async def main() -> None:
         env_overrides.append(f"REGISTER_DOMAIN={os.getenv('REGISTER_DOMAIN')}")
     if os.getenv("REGISTER_DEFAULT_COUNT") is not None:
         env_overrides.append(f"REGISTER_DEFAULT_COUNT={os.getenv('REGISTER_DEFAULT_COUNT')}")
+    if os.getenv("REMOTE_PROJECT_BASE_URL") is not None:
+        env_overrides.append(f"REMOTE_PROJECT_BASE_URL={os.getenv('REMOTE_PROJECT_BASE_URL')}")
+    if os.getenv("REMOTE_PROJECT_PASSWORD") is not None:
+        env_overrides.append("REMOTE_PROJECT_PASSWORD=***")
+    if os.getenv("REMOTE_PROJECT_VERIFY_SSL") is not None:
+        env_overrides.append(f"REMOTE_PROJECT_VERIFY_SSL={os.getenv('REMOTE_PROJECT_VERIFY_SSL')}")
+    if os.getenv("REMOTE_PROJECT_TIMEOUT_SECONDS") is not None:
+        env_overrides.append(f"REMOTE_PROJECT_TIMEOUT_SECONDS={os.getenv('REMOTE_PROJECT_TIMEOUT_SECONDS')}")
+    if os.getenv("REMOTE_PROJECT_USE_REMOTE_PROXY_FOR_AUTH") is not None:
+        env_overrides.append(
+            f"REMOTE_PROJECT_USE_REMOTE_PROXY_FOR_AUTH={os.getenv('REMOTE_PROJECT_USE_REMOTE_PROXY_FOR_AUTH')}"
+        )
     if env_overrides:
         logger.info("[INIT] env overrides active: %s", ", ".join(env_overrides))
     else:
@@ -175,7 +190,16 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    from worker.local_lock import LocalFileLock
+
+    process_lock = LocalFileLock(os.path.join("data", "worker-main.lock"))
+    if not process_lock.acquire(blocking=False):
+        logger.error("[INIT] another worker.main process is already running")
+        sys.exit(1)
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+    finally:
+        process_lock.release()

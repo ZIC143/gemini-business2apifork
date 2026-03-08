@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from worker import storage
 from worker.config import config, config_manager
+from worker.local_lock import LocalFileLock
 from worker.proxy_utils import parse_proxy_setting
 
 logger = logging.getLogger("gemini.refresh")
@@ -91,11 +92,13 @@ class RefreshService:
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._is_polling = False
         self._current_task: Optional[RefreshTask] = None
+        self._round_lock = asyncio.Lock()
         self._log_lock = threading.Lock()
         self._cancel_hooks: Dict[str, List[Callable[[], None]]] = {}
         self._cancel_hooks_lock = threading.Lock()
         self._refresh_timestamps: Dict[str, float] = {}
         self._triggered_today: set = set()
+        self._cross_process_lock = LocalFileLock(os.path.join("data", "automation.lock"))
 
     # ---- logging helpers ----
 
@@ -155,6 +158,18 @@ class RefreshService:
             storage.save_task_history_entry_sync(task.to_dict())
         except Exception:
             pass
+
+    def _request_cancel_current_task(self, reason: str) -> None:
+        task = self._current_task
+        if not task or task.cancel_requested:
+            return
+        task.cancel_requested = True
+        task.cancel_reason = reason
+        try:
+            self._append_log(task, "warning", f"cancel requested: {reason}")
+        except TaskCancelledError:
+            pass
+        self._fire_cancel_hooks(task.id)
 
     # ---- accounts loading ----
 
@@ -399,14 +414,15 @@ class RefreshService:
         else:
             return {"success": False, "email": account_id, "error": f"unsupported mail provider: {mail_provider}"}
 
+        browser_mode = (config.basic.browser_mode or "normal").strip().lower()
         headless = config.basic.browser_headless
 
-        log_cb("info", f"🌐 启动浏览器 (无头模式={headless})...")
+        log_cb("info", f"🌐 启动浏览器 (模式={browser_mode}, 无头={headless})...")
 
         from worker.gemini_automation import GeminiAutomation
         automation = GeminiAutomation(
             proxy=proxy_for_auth,
-            headless=headless,
+            browser_mode=browser_mode,
             log_callback=log_cb,
         )
         # Allow external cancel to close browser immediately
@@ -540,6 +556,105 @@ class RefreshService:
 
         return task
 
+    async def _run_refresh_round(self) -> dict:
+        """Run one full refresh round and return a summary."""
+        summary = {
+            "deleted_expired": 0,
+            "expiring_count": 0,
+            "task_status": "idle",
+            "success_count": 0,
+            "fail_count": 0,
+            "auto_register_attempted": False,
+        }
+
+        if config.retry.delete_expired_accounts:
+            try:
+                summary["deleted_expired"] = self._delete_expired_accounts()
+            except Exception as exc:
+                logger.warning("[REFRESH] expired account deletion failed: %s", exc)
+
+        expiring = self._get_expiring_accounts()
+        summary["expiring_count"] = len(expiring)
+        if not expiring:
+            logger.info("[REFRESH] no accounts need refresh this round")
+        else:
+            logger.info(f"[REFRESH] {len(expiring)} accounts to refresh in one task")
+            try:
+                task = await self._run_single_batch(expiring)
+                summary["task_status"] = task.status.value
+                summary["success_count"] = task.success_count
+                summary["fail_count"] = task.fail_count
+                logger.info(
+                    "[REFRESH] refresh round complete (success: %s, fail: %s)",
+                    task.success_count,
+                    task.fail_count,
+                )
+            except Exception as exc:
+                summary["task_status"] = "error"
+                logger.warning("[REFRESH] refresh round error: %s", exc)
+
+        if config.retry.auto_register_enabled:
+            summary["auto_register_attempted"] = True
+            try:
+                self._auto_register_if_needed()
+            except Exception as exc:
+                logger.warning("[REFRESH] auto registration failed: %s", exc)
+
+        return summary
+
+    async def run_once(self, trigger: str = "manual", reload_config: bool = True, allow_when_disabled: bool = True) -> dict:
+        """
+        Run exactly one refresh round.
+
+        Returns a summary dict:
+          - trigger
+          - skipped (bool)
+          - reason
+          - round fields from _run_refresh_round()
+        """
+        summary = {
+            "trigger": trigger,
+            "skipped": False,
+            "reason": "",
+            "deleted_expired": 0,
+            "expiring_count": 0,
+            "task_status": "idle",
+            "success_count": 0,
+            "fail_count": 0,
+            "auto_register_attempted": False,
+        }
+
+        if reload_config:
+            try:
+                config_manager.reload()
+            except Exception as exc:
+                logger.warning("[REFRESH] config reload failed before run_once: %s", exc)
+
+        if not allow_when_disabled and not config.retry.scheduled_refresh_enabled:
+            summary["skipped"] = True
+            summary["reason"] = "scheduled refresh disabled"
+            logger.debug("[REFRESH] run_once skipped because scheduled refresh is disabled")
+            return summary
+
+        if self._round_lock.locked():
+            summary["skipped"] = True
+            summary["reason"] = "refresh round already running"
+            logger.warning("[REFRESH] run_once skipped: another round is already running")
+            return summary
+
+        async with self._round_lock:
+            if not self._cross_process_lock.acquire(blocking=False):
+                summary["skipped"] = True
+                summary["reason"] = "local automation is busy in another process"
+                logger.warning("[REFRESH] run_once skipped: local automation lock is busy")
+                return summary
+            try:
+                round_summary = await self._run_refresh_round()
+                summary.update(round_summary)
+                return summary
+            finally:
+                self._cross_process_lock.release()
+
     # ---- cron scheduling ----
 
     @staticmethod
@@ -637,52 +752,11 @@ class RefreshService:
                 if not self._is_polling:
                     break
 
-                # Step 1: Delete expired accounts if enabled
-                if config.retry.delete_expired_accounts:
-                    try:
-                        self._delete_expired_accounts()
-                    except Exception as exc:
-                        logger.warning(f"[REFRESH] expired account deletion failed: {exc}")
-
-                # Step 2: Get all expiring accounts and refresh them
-                expiring = self._get_expiring_accounts()
-                if not expiring:
-                    logger.info("[REFRESH] no accounts need refresh this round")
-                else:
-                    batch_size = config.retry.refresh_batch_size
-                    total_batches = (len(expiring) + batch_size - 1) // batch_size
-                    logger.info(f"[REFRESH] {len(expiring)} accounts to refresh, {total_batches} batches (batch size {batch_size})")
-
-                    # Execute in batches
-                    for i in range(0, len(expiring), batch_size):
-                        if not self._is_polling:
-                            break
-
-                        batch = expiring[i:i + batch_size]
-                        batch_num = i // batch_size + 1
-                        logger.info(f"[REFRESH] batch {batch_num}/{total_batches}: {batch}")
-
-                        try:
-                            task = await self._run_single_batch(batch)
-                            logger.info(f"[REFRESH] batch {batch_num} done (success: {task.success_count}, fail: {task.fail_count})")
-                        except Exception as exc:
-                            logger.warning(f"[REFRESH] batch {batch_num} error: {exc}")
-
-                        # Inter-batch wait (skip for last batch)
-                        remaining = expiring[i + batch_size:]
-                        if remaining and self._is_polling:
-                            interval = config.retry.refresh_batch_interval_minutes * 60
-                            logger.info(f"[REFRESH] waiting {config.retry.refresh_batch_interval_minutes} minutes before next batch...")
-                            await asyncio.sleep(interval)
-
-                    logger.info("[REFRESH] refresh round complete")
-
-                # Step 3: Auto-register new accounts if below minimum
-                if config.retry.auto_register_enabled:
-                    try:
-                        self._auto_register_if_needed()
-                    except Exception as exc:
-                        logger.warning(f"[REFRESH] auto registration failed: {exc}")
+                await self.run_once(
+                    trigger="scheduled",
+                    reload_config=False,
+                    allow_when_disabled=False,
+                )
 
         except asyncio.CancelledError:
             logger.info("[REFRESH] polling stopped")
@@ -693,4 +767,5 @@ class RefreshService:
 
     def stop_polling(self) -> None:
         self._is_polling = False
+        self._request_cancel_current_task("service stopping")
         logger.info("[REFRESH] stopping polling")

@@ -19,6 +19,7 @@ import time
 from typing import Optional
 
 from dotenv import load_dotenv
+from worker.remote_project_bridge import RemoteProjectBridge
 
 load_dotenv()
 
@@ -32,10 +33,16 @@ _db_loop_lock = threading.Lock()
 
 _sqlite_conn = None
 _sqlite_lock = threading.Lock()
+_remote_lock = threading.RLock()
+_remote_bridge = RemoteProjectBridge()
 
 
 def _get_database_url() -> str:
     return os.environ.get("DATABASE_URL", "").strip()
+
+
+def _is_remote_enabled() -> bool:
+    return _remote_bridge.is_enabled()
 
 def _default_sqlite_path() -> str:
     return os.path.join("data", "data.db")
@@ -47,6 +54,8 @@ def _get_sqlite_path() -> str:
     return _default_sqlite_path()
 
 def _get_backend() -> str:
+    if _is_remote_enabled():
+        return "remote"
     if _get_database_url():
         return "postgres"
     if _get_sqlite_path():
@@ -54,8 +63,12 @@ def _get_backend() -> str:
     return ""
 
 def is_database_enabled() -> bool:
-    """Return True when a database backend is configured."""
+    """Return True when a storage backend is configured."""
     return bool(_get_backend())
+
+
+def get_storage_mode() -> str:
+    return _get_backend()
 
 
 def _data_file_path(name: str) -> str:
@@ -264,10 +277,28 @@ def _normalize_accounts(accounts: list) -> list:
     return normalized
 
 
+def _load_remote_accounts_unlocked() -> list:
+    payload = _remote_bridge.get_accounts_config()
+    accounts = payload.get("accounts") if isinstance(payload, dict) else None
+    if not isinstance(accounts, list):
+        raise RuntimeError("Remote accounts payload is invalid")
+    return _normalize_accounts(accounts)
+
+
+def _save_remote_accounts_unlocked(accounts: list) -> bool:
+    normalized = _normalize_accounts(accounts)
+    _remote_bridge.update_accounts_config(normalized)
+    logger.info(f"[STORAGE] Saved {len(normalized)} accounts to remote project")
+    return True
+
+
 # ==================== Accounts storage ====================
 
 async def _load_accounts_from_table() -> Optional[list]:
     backend = _get_backend()
+    if backend == "remote":
+        with _remote_lock:
+            return _load_remote_accounts_unlocked()
     if backend == "postgres":
         pool = await _get_pool()
         async with pool.acquire() as conn:
@@ -301,6 +332,9 @@ async def _load_accounts_from_table() -> Optional[list]:
 
 async def _save_accounts_to_table(accounts: list) -> bool:
     backend = _get_backend()
+    if backend == "remote":
+        with _remote_lock:
+            return _save_remote_accounts_unlocked(accounts)
     if backend == "postgres":
         pool = await _get_pool()
         normalized = _normalize_accounts(accounts)
@@ -338,31 +372,32 @@ async def _save_accounts_to_table(accounts: list) -> bool:
 
 
 async def load_accounts() -> Optional[list]:
-    """Load accounts from database."""
+    """Load accounts from storage backend."""
     if not is_database_enabled():
         return None
     try:
         data = await _load_accounts_from_table()
         if data is None:
             return None
+        mode = _get_backend()
         if data:
-            logger.info(f"[STORAGE] Loaded {len(data)} accounts from database")
+            logger.info(f"[STORAGE] Loaded {len(data)} accounts from {mode}")
         else:
-            logger.info("[STORAGE] No accounts found in database")
+            logger.info(f"[STORAGE] No accounts found in {mode}")
         return data
     except Exception as e:
-        logger.error(f"[STORAGE] Database read failed: {e}")
+        logger.error(f"[STORAGE] Storage read failed: {e}")
     return None
 
 
 async def save_accounts(accounts: list) -> bool:
-    """Save account configuration to database when enabled."""
+    """Save account configuration to storage backend when enabled."""
     if not is_database_enabled():
         return False
     try:
         return await _save_accounts_to_table(accounts)
     except Exception as e:
-        logger.error(f"[STORAGE] Database write failed: {e}")
+        logger.error(f"[STORAGE] Storage write failed: {e}")
     return False
 
 
@@ -380,6 +415,10 @@ def save_accounts_sync(accounts: list) -> bool:
 
 async def _get_account_data(account_id: str) -> Optional[dict]:
     backend = _get_backend()
+    if backend == "remote":
+        with _remote_lock:
+            accounts = _load_remote_accounts_unlocked()
+            return next((acc for acc in accounts if acc.get("id") == account_id), None)
     if backend == "postgres":
         pool = await _get_pool()
         async with pool.acquire() as conn:
@@ -406,6 +445,21 @@ async def _get_account_data(account_id: str) -> Optional[dict]:
 async def _update_account_data(account_id: str, data: dict) -> bool:
     backend = _get_backend()
     payload = json.dumps(data, ensure_ascii=False)
+    if backend == "remote":
+        with _remote_lock:
+            accounts = _load_remote_accounts_unlocked()
+            updated = False
+            for idx, acc in enumerate(accounts):
+                if acc.get("id") == account_id:
+                    merged = dict(acc)
+                    merged.update(data or {})
+                    merged["id"] = account_id
+                    accounts[idx] = merged
+                    updated = True
+                    break
+            if not updated:
+                return False
+            return _save_remote_accounts_unlocked(accounts)
     if backend == "postgres":
         pool = await _get_pool()
         async with pool.acquire() as conn:
@@ -443,6 +497,14 @@ def update_account_data_sync(account_id: str, data: dict) -> bool:
 
 async def _delete_account(account_id: str) -> bool:
     backend = _get_backend()
+    if backend == "remote":
+        with _remote_lock:
+            accounts = _load_remote_accounts_unlocked()
+            original_len = len(accounts)
+            filtered = [acc for acc in accounts if acc.get("id") != account_id]
+            if len(filtered) == original_len:
+                return False
+            return _save_remote_accounts_unlocked(filtered)
     if backend == "postgres":
         pool = await _get_pool()
         async with pool.acquire() as conn:
@@ -487,6 +549,10 @@ def delete_accounts_sync(account_ids: list) -> int:
 
 async def _get_max_position() -> int:
     backend = _get_backend()
+    if backend == "remote":
+        with _remote_lock:
+            accounts = _load_remote_accounts_unlocked()
+            return len(accounts)
     if backend == "postgres":
         pool = await _get_pool()
         async with pool.acquire() as conn:
@@ -512,6 +578,23 @@ async def add_account(account_data: dict) -> bool:
         position = max_pos + 1
         payload = json.dumps(account_data, ensure_ascii=False)
         backend = _get_backend()
+        if backend == "remote":
+            with _remote_lock:
+                accounts = _load_remote_accounts_unlocked()
+                updated = False
+                for idx, acc in enumerate(accounts):
+                    if acc.get("id") == account_id:
+                        merged = dict(acc)
+                        merged.update(account_data)
+                        merged["id"] = account_id
+                        accounts[idx] = merged
+                        updated = True
+                        break
+                if not updated:
+                    accounts.append(dict(account_data))
+                _save_remote_accounts_unlocked(accounts)
+            logger.info(f"[STORAGE] Added account {account_id} to remote project")
+            return True
         if backend == "postgres":
             pool = await _get_pool()
             async with pool.acquire() as conn:
@@ -594,6 +677,14 @@ def disable_account_sync(account_id: str, reason: str = "") -> bool:
 async def _load_kv(table_name: str, key: str) -> Optional[dict]:
     """加载键值数据"""
     backend = _get_backend()
+    if backend == "remote":
+        if table_name == "kv_settings" and key == "settings":
+            with _remote_lock:
+                payload = _remote_bridge.get_settings()
+            if isinstance(payload, dict):
+                return payload
+            return None
+        return None
     if backend == "postgres":
         pool = await _get_pool()
         async with pool.acquire() as conn:
@@ -650,6 +741,10 @@ async def save_task_history_entry(entry: dict) -> bool:
     payload = json.dumps(entry, ensure_ascii=False)
     backend = _get_backend()
     try:
+        if backend == "remote":
+            # Remote project does not expose task-history APIs.
+            # Keep worker runtime logic simple: treat as best-effort success.
+            return True
         if backend == "postgres":
             pool = await _get_pool()
             async with pool.acquire() as conn:
