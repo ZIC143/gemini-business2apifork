@@ -11,13 +11,16 @@ class NodeStatsTracker:
         self.stats_file = stats_file
         os.makedirs(os.path.dirname(stats_file), exist_ok=True)
 
-    def record(self, node_name: str, result: Literal["success", "risk_control", "other"]) -> None:
+    def record(self, node_name: str, result: Literal["success", "risk_control", "other"], sync_node_db: bool = True) -> None:
         """记录节点结果"""
         stats = self._load_stats()
         if node_name not in stats:
             stats[node_name] = {"success": 0, "risk_control": 0, "other": 0}
         stats[node_name][result] = stats[node_name].get(result, 0) + 1
         self._save_stats(stats)
+
+        if not sync_node_db:
+            return
 
         # 同步更新节点数据库
         from core import node_manager
@@ -26,8 +29,10 @@ class NodeStatsTracker:
             if node.get("name") == node_name:
                 if result == "success":
                     node["success"] = node.get("success", 0) + 1
+                    node["consecutive_failures"] = 0
                 else:
                     node["fail"] = node.get("fail", 0) + 1
+                    node["consecutive_failures"] = node.get("consecutive_failures", 0) + 1
                 node_manager.save_all_nodes(nodes)
                 break
 

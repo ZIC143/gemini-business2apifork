@@ -77,6 +77,7 @@ def new_node(name: str, url: str,
         "use_for_chat": use_for_chat,
         "success": 0,
         "fail": 0,
+        "consecutive_failures": 0,
         "proxy_config": proxy_config or {},
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
@@ -299,6 +300,7 @@ def reset_node_stats(node_id: str) -> Optional[dict]:
         if n.get("id") == node_id:
             n["success"] = 0
             n["fail"] = 0
+            n["consecutive_failures"] = 0
             n["updated_at"] = _now_iso()
             nodes[i] = n
             save_all_nodes(nodes)
@@ -314,6 +316,7 @@ def record_node_success(node_id: str):
     for i, n in enumerate(nodes):
         if n.get("id") == node_id:
             n["success"] = n.get("success", 0) + 1
+            n["consecutive_failures"] = 0
             n["updated_at"] = _now_iso()
             nodes[i] = n
             save_all_nodes(nodes)
@@ -321,17 +324,26 @@ def record_node_success(node_id: str):
     logger.warning(f"[NodeManager] record_node_success: node {node_id} not found")
 
 
-def record_node_fail(node_id: str):
-    """记录代理请求失败"""
+def record_node_fail(node_id: str, delete_after_consecutive_failures: int = 0) -> Optional[dict]:
+    """记录代理请求失败，可选按连续失败阈值删除节点"""
     nodes = load_all_nodes()
     for i, n in enumerate(nodes):
         if n.get("id") == node_id:
             n["fail"] = n.get("fail", 0) + 1
+            n["consecutive_failures"] = n.get("consecutive_failures", 0) + 1
             n["updated_at"] = _now_iso()
+
+            if delete_after_consecutive_failures > 0 and n["consecutive_failures"] >= delete_after_consecutive_failures:
+                removed = dict(n)
+                del nodes[i]
+                save_all_nodes(nodes)
+                return removed
+
             nodes[i] = n
             save_all_nodes(nodes)
-            return
+            return dict(n)
     logger.warning(f"[NodeManager] record_node_fail: node {node_id} not found")
+    return None
 
 
 # ---------- 代理选择 ----------

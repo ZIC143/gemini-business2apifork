@@ -2006,7 +2006,8 @@ from core.node_manager import (
     load_all_nodes, create_node, update_node, delete_node,
     reset_node_stats, import_from_url_list, import_from_clash_yaml,
     _invalidate_cache, get_effective_proxy, import_subscription, import_yaml,
-    rotate_node, _update_clash_config,
+    rotate_node, _update_clash_config, get_node_by_id,
+    record_node_success, record_node_fail,
 )
 
 
@@ -3465,6 +3466,53 @@ async def get_node_stats_endpoint(request: Request):
     if node_manager._stats_tracker:
         return node_manager._stats_tracker.get_stats()
     return {}
+
+
+@app.post("/api/admin/nodes/{node_id}/report")
+@require_login()
+async def report_node_result_endpoint(node_id: str, request: Request, body: dict = Body(...)):
+    """供 Worker 上报节点结果，由远端统一维护统计与连续失败删除。"""
+    node = get_node_by_id(node_id)
+    if node is None:
+        raise HTTPException(404, "节点不存在")
+
+    result = str(body.get("result", "")).strip().lower()
+    detail = str(body.get("detail", "")).strip().lower()
+    delete_threshold = int(body.get("delete_threshold", 3) or 3)
+
+    if result not in {"success", "fail"}:
+        raise HTTPException(400, "result 必须是 success 或 fail")
+
+    if result == "success":
+        record_node_success(node_id)
+        if node_manager._stats_tracker:
+            node_manager._stats_tracker.record(node.get("name", ""), "success", sync_node_db=False)
+        updated = get_node_by_id(node_id)
+        return {
+            "success": True,
+            "deleted": False,
+            "node": updated,
+        }
+
+    removed = record_node_fail(node_id, delete_after_consecutive_failures=delete_threshold)
+
+    if node_manager._stats_tracker:
+        stats_result = "risk_control" if detail == "risk_control" else "other"
+        node_manager._stats_tracker.record(node.get("name", ""), stats_result, sync_node_db=False)
+
+    deleted = removed is not None and get_node_by_id(node_id) is None
+    current_node = None if deleted else get_node_by_id(node_id)
+
+    if deleted:
+        logger.warning("[NODE] 节点连续失败达到阈值，已删除: %s (%s)", node.get("name", ""), node_id)
+        await _apply_node_proxy()
+
+    return {
+        "success": True,
+        "deleted": deleted,
+        "node": current_node,
+        "removed_node": removed if deleted else None,
+    }
 
 
 @app.post("/api/admin/nodes/rotate")
