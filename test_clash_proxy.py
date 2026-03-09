@@ -19,7 +19,7 @@ def test_proxy_control():
         "master_enabled": True,
         "auth_enabled": True,
         "chat_enabled": True,
-        "port": 17890
+        "port": 7890
     }
 
     result = storage.save_proxy_control_sync(test_config)
@@ -29,7 +29,7 @@ def test_proxy_control():
     loaded = storage.load_proxy_control_sync()
     print(f"✓ 加载配置: {loaded}")
 
-    if loaded and loaded.get("port") == 17890:
+    if loaded and loaded.get("port") == 7890:
         print("✅ 代理控制配置测试通过")
         return True
     else:
@@ -61,7 +61,7 @@ def test_clash_config():
     print("✅ Clash 配置文件测试通过")
     return True
 
-def test_proxy_connection(port=17890):
+def test_proxy_connection(port=7890):
     """测试代理连接"""
     print("\n" + "=" * 50)
     print(f"测试 3: 代理连接 (端口 {port})")
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     results.append(("代理控制配置", test_proxy_control()))
     results.append(("Clash 配置文件", test_clash_config()))
     results.append(("节点管理", test_node_manager()))
-    results.append(("代理连接", test_proxy_connection(17890)))
+    results.append(("代理连接", test_proxy_connection(7890)))
 
     print("\n" + "=" * 50)
     print("测试结果汇总")

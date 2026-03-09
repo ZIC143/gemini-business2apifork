@@ -184,50 +184,17 @@ class RegisterService(BaseTaskService[RegisterTask]):
         browser_mode = config.basic.browser_mode
         proxy_for_auth, _ = parse_proxy_setting(config.basic.proxy_for_auth)
 
-        # 节点轮询
+        # 节点预检与切换
         current_node = None
-        current_node_url = None
-        if node_manager.rotate_node():
-            current_node = node_manager.rotate_node()
-            current_node_url = node_manager.get_current_proxy()
-            if current_node_url:
-                proxy_for_auth = current_node_url
-                log_cb("info", f"🔄 使用节点: {current_node}")
-                log_cb("info", f"📍 代理地址: {current_node_url}")
-
-                # 验证代理连接和节点
-                try:
-                    import httpx
-                    proxies = {"http://": current_node_url, "https://": current_node_url}
-                    with httpx.Client(proxies=proxies, timeout=10) as http_client:
-                        # 测试1: 代理连接
-                        resp = http_client.get("https://www.google.com/generate_204")
-                        if resp.status_code == 204:
-                            log_cb("info", f"✅ 代理连接成功")
-                        else:
-                            log_cb("error", f"❌ 代理验证失败: HTTP {resp.status_code}")
-                            return {"success": False, "error": f"代理验证失败: HTTP {resp.status_code}"}
-
-                        # 测试2: 验证当前 IP（确认节点生效）
-                        try:
-                            ip_resp = http_client.get("https://api.ipify.org?format=json", timeout=5)
-                            if ip_resp.status_code == 200:
-                                proxy_ip = ip_resp.json().get("ip", "未知")
-                                log_cb("info", f"✅ 当前代理 IP: {proxy_ip}")
-                            else:
-                                log_cb("warning", "⚠️ 无法获取代理 IP")
-                        except Exception:
-                            log_cb("warning", "⚠️ IP 验证跳过")
-
-                except httpx.ConnectError as e:
-                    log_cb("error", f"❌ 无法连接到代理: {e}")
-                    log_cb("error", f"⚠️ Clash 可能未启动或端口配置错误")
-                    return {"success": False, "error": f"代理连接失败: {e}"}
-                except Exception as e:
-                    log_cb("error", f"❌ 代理验证异常: {e}")
-                    return {"success": False, "error": f"代理验证异常: {e}"}
-            else:
-                log_cb("warning", "⚠️ 节点轮询返回空代理地址")
+        selection = node_manager.select_working_node(use_for="auth", max_failures=5, log_cb=log_cb)
+        if selection.selected:
+            current_node = selection.node_name
+            proxy_for_auth = selection.proxy_url
+            log_cb("info", f"🔄 使用节点: {current_node}")
+        elif selection.attempted_count > 0:
+            failed_nodes = "、".join(attempt.node_name for attempt in selection.attempts)
+            log_cb("error", f"❌ 连续 {selection.attempted_count} 个节点预检失败: {failed_nodes}")
+            return {"success": False, "error": selection.final_error or "节点预检失败"}
         else:
             log_cb("info", "ℹ️ 未启用节点代理，使用配置文件中的代理设置")
 

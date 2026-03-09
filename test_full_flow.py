@@ -14,7 +14,7 @@ print("=" * 60)
 # 1. 检查配置
 print("\n[1/5] 检查配置...")
 proxy_cfg = storage.load_proxy_control_sync()
-port = proxy_cfg.get('port', 17890)
+port = proxy_cfg.get('port', 7890)
 print(f"✓ 代理端口: {port}")
 print(f"✓ Auth启用: {proxy_cfg.get('auth_enabled')}")
 

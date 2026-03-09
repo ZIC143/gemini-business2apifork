@@ -180,7 +180,7 @@ clash_manager = None
 
 def load_proxy_control() -> dict:
     """加载代理控制配置"""
-    default = {"master_enabled": False, "auth_enabled": True, "chat_enabled": True, "port": 17890}
+    default = {"master_enabled": False, "auth_enabled": True, "chat_enabled": True, "port": 7890}
     if not storage.is_database_enabled():
         return default
     try:
@@ -192,7 +192,7 @@ def load_proxy_control() -> dict:
 def create_default_clash_config(path: str):
     """创建默认 Clash 配置文件"""
     default_config = {
-        "mixed-port": 17890,
+        "mixed-port": 7890,
         "mode": "global",
         "log-level": "silent",
         "proxies": [],
@@ -701,7 +701,7 @@ async def lifespan(app: FastAPI):
     clash_manager = None
     proxy_control = load_proxy_control()
     if proxy_control.get("master_enabled", False):
-        port = proxy_control.get("port", 17890)
+        port = proxy_control.get("port", 7890)
         clash_config_path = "clash_config.yaml"
 
         # 确保配置文件存在并使用正确端口
@@ -2006,7 +2006,7 @@ from core.node_manager import (
     load_all_nodes, create_node, update_node, delete_node,
     reset_node_stats, import_from_url_list, import_from_clash_yaml,
     _invalidate_cache, get_effective_proxy, import_subscription, import_yaml,
-    rotate_node,
+    rotate_node, _update_clash_config,
 )
 
 
@@ -2092,6 +2092,7 @@ async def admin_update_node(node_id: str, request: Request, body: dict = Body(..
     node = update_node(node_id, body)
     if node is None:
         raise HTTPException(404, "节点不存在")
+    _update_clash_config()
     await _apply_node_proxy()
     return node
 
@@ -2103,6 +2104,7 @@ async def admin_delete_node(node_id: str, request: Request):
     ok = delete_node(node_id)
     if not ok:
         raise HTTPException(404, "节点不存在")
+    _update_clash_config()
     await _apply_node_proxy()
     return {"status": "deleted"}
 

@@ -358,9 +358,9 @@ const sortedNodes = computed(() => {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(n => n.name.toLowerCase().includes(q) || n.url.toLowerCase().includes(q))
   }
-  if (sortBy.value === 'success_rate') return list.sort((a, b) => (b.success_rate || 0) - (a.success_rate || 0))
-  if (sortBy.value === 'success_count') return list.sort((a, b) => (b.success_count || 0) - (a.success_count || 0))
-  if (sortBy.value === 'fail_count') return list.sort((a, b) => (a.fail_count || 0) - (b.fail_count || 0))
+  if (sortBy.value === 'success_rate') return list.sort((a, b) => successRateValue(b) - successRateValue(a))
+  if (sortBy.value === 'success_count') return list.sort((a, b) => (b.success || 0) - (a.success || 0))
+  if (sortBy.value === 'fail_count') return list.sort((a, b) => (a.fail || 0) - (b.fail || 0))
   if (sortBy.value === 'name') return list.sort((a, b) => a.name.localeCompare(b.name))
   return list
 })
@@ -545,15 +545,19 @@ async function importYaml() {
 // ---------- 工具函数 ----------
 
 function successRatePercent(node: Node): string {
-  const total = node.success + node.fail
-  if (total === 0) return '100%'
-  return `${Math.round((node.success / total) * 100)}%`
+  return `${Math.round(successRateValue(node) * 100)}%`
 }
 
 function successRateLabel(node: Node): string {
   const total = node.success + node.fail
   if (total === 0) return '未使用'
-  return `${Math.round((node.success / total) * 100)}%`
+  return `${Math.round(successRateValue(node) * 100)}%`
+}
+
+function successRateValue(node: Node): number {
+  const total = (node.success || 0) + (node.fail || 0)
+  if (total === 0) return 1
+  return (node.success || 0) / total
 }
 
 // ---------- 加载节点 ----------

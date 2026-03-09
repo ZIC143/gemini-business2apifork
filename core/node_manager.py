@@ -9,9 +9,11 @@
 import base64
 import uuid
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 import requests
 import yaml
 
@@ -22,6 +24,30 @@ logger = logging.getLogger(__name__)
 # Clash 集成
 _clash_manager = None
 _stats_tracker = None
+
+
+@dataclass
+class NodeAttemptResult:
+    """单个节点预检结果"""
+    node_id: str
+    node_name: str
+    proxy_url: str
+    reason: str
+
+
+@dataclass
+class NodeSelectionResult:
+    """节点预检与选择结果"""
+    selected: bool
+    node_id: Optional[str] = None
+    node_name: Optional[str] = None
+    proxy_url: str = ""
+    attempts: list[NodeAttemptResult] = field(default_factory=list)
+    final_error: str = ""
+
+    @property
+    def attempted_count(self) -> int:
+        return len(self.attempts)
 
 
 def init_clash(clash_manager, stats_tracker):
@@ -86,6 +112,129 @@ def load_all_nodes() -> list:
         data = []
     _nodes_cache = data
     return _nodes_cache
+
+
+def _sorted_candidate_nodes(use_for: str = "auth") -> list[dict]:
+    """按用途与成功率返回候选节点。"""
+    nodes = load_all_nodes()
+    key = "use_for_auth" if use_for == "auth" else "use_for_chat"
+    candidates = [
+        n for n in nodes
+        if n.get("enabled")
+        and n.get(key)
+        and (_clash_manager is not None or not n.get("proxy_config"))
+    ]
+    candidates.sort(
+        key=lambda node: (
+            -_success_rate(node),
+            node.get("created_at") or "",
+            node.get("name") or "",
+        )
+    )
+    return candidates
+
+
+def _current_clash_proxy_url() -> str:
+    if _clash_manager:
+        return f"http://127.0.0.1:{_clash_manager.mixed_port}"
+    return ""
+
+
+def _node_runtime_proxy_url(node: dict) -> str:
+    """根据节点类型返回本次实际使用的代理地址。"""
+    if node.get("proxy_config"):
+        clash_url = _current_clash_proxy_url()
+        if clash_url:
+            return clash_url
+    return (node.get("url") or "").strip()
+
+
+def _verify_proxy_connectivity(proxy_url: str, timeout: float = 10.0) -> tuple[bool, str]:
+    """验证代理连通性。"""
+    if not proxy_url:
+        return False, "节点代理地址为空"
+    try:
+        proxies = {"http://": proxy_url, "https://": proxy_url}
+        with httpx.Client(proxy=proxy_url, timeout=timeout, follow_redirects=True) as http_client:
+            response = http_client.get("https://www.google.com/generate_204")
+            if response.status_code != 204:
+                return False, f"代理验证失败: HTTP {response.status_code}"
+        return True, ""
+    except httpx.ConnectError as exc:
+        return False, f"代理连接失败: {exc}"
+    except httpx.TimeoutException as exc:
+        return False, f"代理验证超时: {exc}"
+    except Exception as exc:
+        return False, f"代理验证异常: {exc}"
+
+
+def _select_node_for_attempt(node: dict) -> tuple[bool, str]:
+    """切换到目标节点，必要时更新 Clash 选择器。"""
+    if node.get("proxy_config"):
+        if not _clash_manager:
+            return False, "Clash 未初始化，无法使用 YAML 节点"
+        if not _clash_manager.select_proxy(node.get("name", ""), "GLOBAL"):
+            return False, "Clash 切换节点失败"
+    return True, ""
+
+
+def _remember_current_node(node: Optional[dict]) -> None:
+    global _current_node_id
+    _current_node_id = node.get("id") if node else None
+
+
+def select_working_node(
+    use_for: str = "auth",
+    max_failures: int = 5,
+    log_cb=None,
+) -> NodeSelectionResult:
+    """依次测试节点，返回可用节点；最多尝试 `max_failures` 个失败节点。"""
+    candidates = _sorted_candidate_nodes(use_for)
+    if not candidates:
+        _remember_current_node(None)
+        return NodeSelectionResult(selected=False)
+
+    attempts: list[NodeAttemptResult] = []
+    max_attempts = min(max_failures, len(candidates))
+
+    for node in candidates[:max_attempts]:
+        node_name = str(node.get("name") or "")
+        node_id = str(node.get("id") or "")
+        proxy_url = _node_runtime_proxy_url(node)
+
+        if log_cb:
+            log_cb("info", f"🔍 测试节点: {node_name}")
+
+        switched, switch_reason = _select_node_for_attempt(node)
+        if not switched:
+            record_node_fail(node_id)
+            attempts.append(NodeAttemptResult(node_id=node_id, node_name=node_name, proxy_url=proxy_url, reason=switch_reason))
+            if log_cb:
+                log_cb("warning", f"⚠️ 节点不可用: {node_name} - {switch_reason}")
+            continue
+
+        ok, reason = _verify_proxy_connectivity(proxy_url)
+        if ok:
+            _remember_current_node(node)
+            if log_cb:
+                log_cb("info", f"✅ 节点预检成功: {node_name}")
+                log_cb("info", f"📍 代理地址: {proxy_url}")
+            return NodeSelectionResult(
+                selected=True,
+                node_id=node_id,
+                node_name=node_name,
+                proxy_url=proxy_url,
+                attempts=attempts,
+            )
+
+        record_node_fail(node_id)
+        attempts.append(NodeAttemptResult(node_id=node_id, node_name=node_name, proxy_url=proxy_url, reason=reason))
+        if log_cb:
+            log_cb("warning", f"⚠️ 节点不可用: {node_name} - {reason}")
+
+    _remember_current_node(None)
+    final_error = attempts[-1].reason if attempts else "未找到可用节点"
+    return NodeSelectionResult(selected=False, attempts=attempts, final_error=final_error)
 
 
 def save_all_nodes(nodes: list) -> bool:
@@ -193,13 +342,10 @@ def get_best_proxy(use_for: str = "auth") -> Optional[str]:
     use_for: 'auth' | 'chat'
     返回 proxy URL 字符串，如无可用节点则返回 None。
     """
-    nodes = load_all_nodes()
-    key = "use_for_auth" if use_for == "auth" else "use_for_chat"
-    candidates = [n for n in nodes if n.get("enabled") and n.get(key)]
+    candidates = _sorted_candidate_nodes(use_for)
     if not candidates:
         return None
-    candidates.sort(key=_success_rate, reverse=True)
-    return candidates[0].get("url") or None
+    return _node_runtime_proxy_url(candidates[0]) or None
 
 
 def get_effective_proxy(use_for: str, fallback: str = "") -> str:
@@ -274,7 +420,7 @@ def import_from_clash_yaml(yaml_text: str,
     # 从代理控制配置读取端口
     if local_proxy_port is None:
         proxy_cfg = storage.load_proxy_control_sync() or {}
-        local_proxy_port = proxy_cfg.get("port", 17890)
+        local_proxy_port = proxy_cfg.get("port", 7890)
 
     local_url = f"http://127.0.0.1:{local_proxy_port}"
     existing_names = {n.get("name") for n in load_all_nodes()}
@@ -305,22 +451,18 @@ def rotate_node() -> Optional[str]:
     """轮询切换到下一个健康节点"""
     global _current_node_index, _current_node_id
 
-    nodes = load_all_nodes()
-    enabled_nodes = [n for n in nodes if n.get("enabled", True)]
+    enabled_nodes = _sorted_candidate_nodes("auth")
 
     if not enabled_nodes:
         return None
 
-    # 按成功率排序，优先使用成功率高的节点
-    enabled_nodes.sort(key=_success_rate, reverse=True)
-
     # 轮询选择节点
     _current_node_index = (_current_node_index + 1) % len(enabled_nodes)
     selected = enabled_nodes[_current_node_index]
-    _current_node_id = selected["id"]
+    _remember_current_node(selected)
 
     # 如果有 Clash 管理器，切换到该节点
-    if _clash_manager:
+    if _clash_manager and selected.get("proxy_config"):
         try:
             _clash_manager.select_proxy(selected["name"], "GLOBAL")
         except Exception as e:
@@ -339,10 +481,7 @@ def get_current_proxy() -> str:
     nodes = load_all_nodes()
     for n in nodes:
         if n.get("id") == _current_node_id:
-            # 返回本地 Clash 代理地址
-            if _clash_manager:
-                return f"http://127.0.0.1:{_clash_manager.mixed_port}"
-            return n.get("url", "")
+            return _node_runtime_proxy_url(n)
 
     return ""
 

@@ -25,7 +25,7 @@ if enabled:
     print(f"✓ use_for_chat: {enabled[0].get('use_for_chat')}")
 
 # 3. 测试代理连接
-port = proxy_cfg.get('port', 17890)
+port = proxy_cfg.get('port', 7890)
 proxy_url = f"http://127.0.0.1:{port}"
 print(f"\n测试代理连接: {proxy_url}")
 

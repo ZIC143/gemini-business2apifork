@@ -96,9 +96,11 @@ class ClashManager:
     def reload_config(self) -> bool:
         """热重载配置"""
         try:
+            if not self._prepare_runtime_config():
+                return False
             url = f"{self.api_url}/configs"
-            requests.put(url, json={"path": self.config_path}, timeout=5)
-            return True
+            res = requests.put(url, json={"path": self.runtime_config_path}, timeout=5)
+            return res.ok
         except Exception:
             return False
 
@@ -128,8 +130,8 @@ class ClashManager:
         try:
             encoded = urllib.parse.quote(group_name)
             url = f"{self.api_url}/proxies/{encoded}"
-            requests.put(url, json={"name": proxy_name}, timeout=5)
-            return True
+            res = requests.put(url, json={"name": proxy_name}, timeout=5)
+            return res.ok
         except Exception:
             return False
 

@@ -291,11 +291,16 @@ class LoginService(BaseTaskService[LoginTask]):
 
         browser_mode = config.basic.browser_mode
 
-        # 节点轮询
-        current_node = node_manager.rotate_node()
-        if current_node:
-            proxy_for_auth = node_manager.get_current_proxy()
+        # 节点预检与切换
+        current_node = None
+        selection = node_manager.select_working_node(use_for="auth", max_failures=5, log_cb=log_cb)
+        if selection.selected:
+            current_node = selection.node_name
+            proxy_for_auth = selection.proxy_url
             log_cb("info", f"🔄 切换节点: {current_node}")
+        elif selection.attempted_count > 0:
+            failed_nodes = "、".join(attempt.node_name for attempt in selection.attempts)
+            return {"success": False, "email": account_id, "error": f"连续 {selection.attempted_count} 个节点预检失败: {failed_nodes}；{selection.final_error or '节点预检失败'}"}
 
         log_cb("info", f"🌐 启动浏览器 (模式={browser_mode})...")
 

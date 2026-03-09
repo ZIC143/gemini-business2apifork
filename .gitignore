@@ -48,3 +48,14 @@ static/
 Thumbs.db
 old_version.py
 .ace-tool/
+
+
+ui/
+cache.db
+clash_config copy.yaml
+clash_config.yaml
+clash_config_runtime.yaml
+mihomo.exe
+test_clash_proxy.py
+test_full_flow.py
+test_proxy_fix.py
