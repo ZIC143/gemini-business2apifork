@@ -3477,37 +3477,26 @@ async def rotate_node_endpoint(request: Request):
 
 def save_proxy_control(data: dict):
     """保存代理控制状态"""
-    import json
-    import os
-    os.makedirs("data", exist_ok=True)
-    control_file = "data/proxy_control.json"
-    with open(control_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    default = {"master_enabled": False, "auth_enabled": True, "chat_enabled": True, "port": 7890}
+    payload = default | (data or {})
+    if not storage.is_database_enabled():
+        raise RuntimeError("数据库未启用，无法保存代理控制配置")
+    ok = storage.save_proxy_control_sync(payload)
+    if not ok:
+        raise RuntimeError("保存代理控制配置失败")
 
 
 @app.get("/api/admin/proxy-control")
 @require_login()
 async def get_proxy_control(request: Request):
     """获取代理控制状态"""
-    import json
-    import os
-    control_file = "data/proxy_control.json"
-    if os.path.exists(control_file):
-        try:
-            with open(control_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"master_enabled": False, "auth_enabled": False, "chat_enabled": False}
+    return load_proxy_control()
 
 
 @app.put("/api/admin/proxy-control")
 @require_login()
 async def update_proxy_control(request: Request, body: dict = Body(...)):
     """更新代理控制状态"""
-    import json
-    import os
-
     # 代理互斥：启用节点代理时自动清空系统代理
     master_enabled = body.get("master_enabled", False)
     if master_enabled:
@@ -3519,11 +3508,8 @@ async def update_proxy_control(request: Request, body: dict = Body(...)):
             config.basic.proxy_for_chat = ""
             # 这里不需要保存配置文件，因为前端会处理
 
-    os.makedirs("data", exist_ok=True)
-    control_file = "data/proxy_control.json"
     try:
-        with open(control_file, "w", encoding="utf-8") as f:
-            json.dump(body, f, ensure_ascii=False, indent=2)
+        save_proxy_control(body)
         return {"success": True}
     except Exception as e:
         raise HTTPException(500, f"保存失败: {e}")
