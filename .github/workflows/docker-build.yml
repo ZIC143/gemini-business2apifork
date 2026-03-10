@@ -1,12 +1,16 @@
-name: Build Multi-Arch Docker Image
+name: Build Refresh Worker Docker Image
 
 on:
   push:
     branches:
-      - main
+      - refresh-worker
     tags:
       - "v*"
   workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write   # 必须加这行才能推送到 ghcr
 
 jobs:
   build:
@@ -21,23 +25,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/gemini-business2api
+          images: ghcr.io/${{ github.repository_owner }}/gemini-refresh-worker
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -49,7 +53,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # 优化构建参数
           build-args: |
             BUILDKIT_INLINE_CACHE=1
           provenance: false
