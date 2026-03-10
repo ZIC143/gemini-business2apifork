@@ -3,7 +3,7 @@ name: Build Refresh Worker Docker Image
 on:
   push:
     branches:
-      - refresh-worker
+      - my-feature
     tags:
       - "v*"
   workflow_dispatch:
