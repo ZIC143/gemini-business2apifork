@@ -20,7 +20,6 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.59.0",
     "@vitejs/plugin-vue": "^6.0.3",
     "axios": "^1.13.2",
     "echarts": "^6.0.0",
