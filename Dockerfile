@@ -1,10 +1,13 @@
+# syntax=docker/dockerfile:1.7
+
 # Stage 1: 构建前端
-FROM node:20-slim AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:20-slim AS frontend-builder
 WORKDIR /app/frontend
 
 # 先复制 package 文件利用 Docker 缓存
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm install --silent
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --silent
 
 # 复制前端源码并构建
 COPY frontend/ ./
@@ -20,7 +23,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # 安装 Python 依赖和浏览器依赖（合并为单一 RUN 指令以减少层数）
 COPY requirements.txt .
-RUN apt-get update && \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=cache,target=/root/.cache/pip \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         gcc \
         curl \
@@ -33,10 +39,10 @@ RUN apt-get update && \
         libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 \
         libcairo2 fonts-liberation fonts-noto-cjk && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
-    pip install --no-cache-dir -r requirements.txt && \
+    pip install -r requirements.txt && \
     apt-get purge -y gcc && \
     apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    rm -rf /tmp/* /var/tmp/*
 
 # 复制后端代码
 COPY main.py .
