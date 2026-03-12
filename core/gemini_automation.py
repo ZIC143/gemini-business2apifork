@@ -566,14 +566,9 @@ class GeminiAutomation:
         if code_input:
             self._stop_listen(page)
             self._log("info", "✅ 已在验证码输入页面")
-
-            # 直接点击重新发送按钮（不管之前是否发送过）
-            if self._click_resend_code_button(page):
-                self._log("info", "✅ 已点击重新发送按钮")
-                return True
-            else:
-                self._log("warning", "⚠️ 未找到重新发送按钮，继续流程")
-                return True
+            self._last_send_confidence = "unknown"
+            self._log("info", "ℹ️ 验证码输入页通常已自动触发发送，先直接进入收码流程")
+            return True
 
         self._stop_listen(page)
         self._log("error", "❌ 未找到发送验证码按钮")
