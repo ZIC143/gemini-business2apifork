@@ -11,6 +11,9 @@ from core.mail_utils import extract_verification_code
 from core.proxy_utils import request_with_proxy_fallback
 
 
+DAILY_QUOTA_EXCEEDED_ERROR = "daily quota exceeded"
+
+
 class GPTMailClient:
     """GPTMail 临时邮箱客户端"""
 
@@ -20,6 +23,7 @@ class GPTMailClient:
         proxy: str = "",
         verify_ssl: bool = True,
         api_key: str = "",
+        fallback_api_key: str = "",
         domain: str = "",
         log_callback=None,
     ) -> None:
@@ -27,8 +31,10 @@ class GPTMailClient:
         self.verify_ssl = verify_ssl
         self.proxy_url = (proxy or "").strip()
         self.api_key = (api_key or "").strip()
+        self.fallback_api_key = (fallback_api_key or "").strip()
         self.domain = (domain or "").strip()
         self.log_callback = log_callback
+        self._using_fallback = False
 
         self.email: Optional[str] = None
 
@@ -73,6 +79,28 @@ class GPTMailClient:
             except Exception:
                 pass
         return res
+
+    def _should_use_fallback_key(self, error_message: Optional[str]) -> bool:
+        message = (error_message or "").strip().lower()
+        return (
+            bool(message)
+            and DAILY_QUOTA_EXCEEDED_ERROR in message
+            and bool(self.fallback_api_key)
+            and not self._using_fallback
+        )
+
+    def _with_fallback_api_key(self, reason: str, action):
+        if not self.fallback_api_key or self._using_fallback:
+            return action()
+
+        original_key = self.api_key
+        self._using_fallback = True
+        self.api_key = self.fallback_api_key
+        self._log("warning", f"⚠️ {reason}，切换为全局 GPTMail API Key 重试一次")
+        try:
+            return action()
+        finally:
+            self.api_key = original_key
 
     def generate_email(self, domain: Optional[str] = None) -> Optional[str]:
         """生成一个新的邮箱地址。"""
@@ -123,7 +151,13 @@ class GPTMailClient:
             return []
         body = res.json() if res.content else {}
         if not body.get("success"):
-            self._log("error", f"❌ 获取邮件列表失败: {body.get('error') or 'unknown error'}")
+            error_message = body.get("error") or "unknown error"
+            if self._should_use_fallback_key(error_message):
+                return self._with_fallback_api_key(
+                    "账号级 GPTMail API Key 已触发 Daily quota exceeded",
+                    lambda: self._list_emails(email),
+                )
+            self._log("error", f"❌ 获取邮件列表失败: {error_message}")
             return []
         return list(((body.get("data") or {}).get("emails") or []))
 
@@ -135,7 +169,13 @@ class GPTMailClient:
             return None
         body = res.json() if res.content else {}
         if not body.get("success"):
-            self._log("warning", f"⚠️ 获取邮件详情失败: {body.get('error') or 'unknown error'}")
+            error_message = body.get("error") or "unknown error"
+            if self._should_use_fallback_key(error_message):
+                return self._with_fallback_api_key(
+                    "账号级 GPTMail API Key 在读取邮件详情时触发 Daily quota exceeded",
+                    lambda: self._get_email(mail_id),
+                )
+            self._log("warning", f"⚠️ 获取邮件详情失败: {error_message}")
             return None
         return body.get("data") or None
 

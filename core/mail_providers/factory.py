@@ -17,6 +17,7 @@ def create_temp_mail_client(
     log_cb: Optional[Callable[[str, str], None]] = None,
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
+    fallback_api_key: Optional[str] = None,
     jwt_token: Optional[str] = None,
     verify_ssl: Optional[bool] = None,
 ):
@@ -58,11 +59,18 @@ def create_temp_mail_client(
 
     if provider == "gptmail":
         effective_base_url = base_url or config.basic.gptmail_base_url
+        effective_api_key = api_key or config.basic.gptmail_api_key
+        effective_fallback_api_key = ""
+        if api_key and config.basic.gptmail_api_key and api_key != config.basic.gptmail_api_key:
+            effective_fallback_api_key = config.basic.gptmail_api_key
+        elif fallback_api_key:
+            effective_fallback_api_key = fallback_api_key
         if no_proxy_matches(extract_host(effective_base_url), no_proxy):
             proxy = ""
         return GPTMailClient(
             base_url=effective_base_url,
-            api_key=api_key or config.basic.gptmail_api_key,
+            api_key=effective_api_key,
+            fallback_api_key=effective_fallback_api_key,
             proxy=proxy,
             verify_ssl=verify_ssl if verify_ssl is not None else config.basic.gptmail_verify_ssl,
             domain=domain or config.basic.gptmail_domain,
