@@ -72,6 +72,37 @@ class GeminiAutomation:
         self._last_send_error = ""
         self._last_send_confidence = "unknown"
 
+    def _is_on_code_input_page(self, page) -> bool:
+        """判断当前是否已进入验证码输入页面。"""
+        try:
+            return bool(
+                page.ele("css:input[jsname='ovqh0b']", timeout=1)
+                or page.ele("css:input[name='pinInput']", timeout=1)
+                or page.ele("css:input[autocomplete='one-time-code']", timeout=1)
+            )
+        except Exception:
+            return False
+
+    def _check_existing_code_page_status(self, page) -> Optional[bool]:
+        """检查已处于验证码输入页面时，本轮发送是否已经成功。"""
+        if not self._is_on_code_input_page(page):
+            return None
+
+        self._log("info", "✅ 已在验证码输入页面")
+        ui_state = self._verify_code_send_status(page)
+        if ui_state is True:
+            self._last_send_confidence = "confirmed"
+            self._log("info", "✅ 已检测到验证码发送成功提示")
+            return True
+        if ui_state is False:
+            self._last_send_confidence = "failed"
+            self._log("warning", "⚠️ 已在验证码输入页面，并检测到发送失败提示")
+            return False
+
+        self._last_send_confidence = "unknown"
+        self._log("warning", "⚠️ 已进入验证码输入页面，但暂未检测到成功/失败提示")
+        return None
+
     def stop(self) -> None:
         """外部请求停止：尽力关闭浏览器实例。"""
         page = self._page
@@ -331,12 +362,30 @@ class GeminiAutomation:
 
         # Step 3: 点击发送验证码按钮（最多5轮，适度退避间隔）
         self._log("info", "📧 发送验证码...")
-        max_send_rounds = 5
+        max_send_rounds = 3
         send_round_delays = [10, 10, 15, 15, 20]
         send_round = 0
         while True:
             send_round += 1
-            if self._click_send_code_button(page):
+            on_code_page = self._is_on_code_input_page(page)
+            if on_code_page:
+                page_status = self._check_existing_code_page_status(page)
+                if page_status is True:
+                    send_ok = True
+                elif page_status is False:
+                    self._log("warning", f"⚠️ 已在验证码输入页面，但检测到发送失败提示，第 {send_round}/{max_send_rounds} 轮尝试重新发送验证码")
+                    send_ok = self._click_resend_code_button(page)
+                else:
+                    if send_round == 1:
+                        self._log("warning", "⚠️ 已在验证码输入页面，但首轮尚未确认发送结果，先等待下一轮确认")
+                        send_ok = False
+                    else:
+                        self._log("info", f"✅ 已在验证码输入页面，第 {send_round}/{max_send_rounds} 轮改用重新发送验证码")
+                        send_ok = self._click_resend_code_button(page)
+            else:
+                send_ok = self._click_send_code_button(page)
+
+            if send_ok:
                 break
             if send_round >= max_send_rounds:
                 self._log("error", "❌ 验证码发送失败（可能触发风控），建议更换代理IP")
@@ -354,11 +403,14 @@ class GeminiAutomation:
             return {"success": False, "error": "code input not found"}
 
         # Step 5: 轮询邮件获取验证码（3次，每次5秒间隔）
-        self._log("info", "📬 等待邮箱验证码...")
         poll_since_time = task_start_time - timedelta(seconds=30)
-        first_timeout = 30 if self._last_send_confidence == "confirmed" else 20
-        self._log("info", f"📬 等待邮箱验证码 (窗口 {first_timeout}s, 发送状态={self._last_send_confidence})")
-        code = mail_client.poll_for_code(timeout=first_timeout, interval=5, since_time=poll_since_time)
+        code = None
+        if self._last_send_confidence == "confirmed":
+            first_timeout = 30
+            self._log("info", f"📬 验证码发送成功，开始检查邮箱 (窗口 {first_timeout}s, 发送状态={self._last_send_confidence})")
+            code = mail_client.poll_for_code(timeout=first_timeout, interval=5, since_time=poll_since_time)
+        else:
+            self._log("warning", f"⚠️ 验证码发送未确认成功，跳过邮箱检查并进入重发流程 (发送状态={self._last_send_confidence})")
 
         if not code:
             from core.config import config
@@ -378,8 +430,12 @@ class GeminiAutomation:
                     self._log("warning", f"⚠️ 未找到重发按钮 ({resend_index}/{resend_attempts})")
                     continue
 
-                resend_timeout = 25 if self._last_send_confidence == "confirmed" else 15
-                self._log("info", f"📬 已执行重发，继续轮询 (窗口 {resend_timeout}s, 发送状态={self._last_send_confidence}, 第 {resend_index} 次重发)")
+                if self._last_send_confidence != "confirmed":
+                    self._log("warning", f"⚠️ 第 {resend_index} 次重发后仍未确认发送成功，跳过邮箱检查")
+                    continue
+
+                resend_timeout = 25
+                self._log("info", f"📬 第 {resend_index} 次重发发送成功，开始检查邮箱 (窗口 {resend_timeout}s, 发送状态={self._last_send_confidence})")
                 code = mail_client.poll_for_code(timeout=resend_timeout, interval=5, since_time=poll_since_time)
                 if code:
                     break
@@ -503,7 +559,7 @@ class GeminiAutomation:
             )
         except Exception:
             pass
-        max_send_attempts = 5
+        max_send_attempts = 3
         # 适度退避延迟序列（秒）
         retry_delays = [10, 10, 15, 15, 20]
 
@@ -562,13 +618,9 @@ class GeminiAutomation:
             return False
 
         # 检查是否已经在验证码输入页面
-        code_input = page.ele("css:input[jsname='ovqh0b']", timeout=2) or page.ele("css:input[name='pinInput']", timeout=1)
-        if code_input:
+        if self._is_on_code_input_page(page):
             self._stop_listen(page)
-            self._log("info", "✅ 已在验证码输入页面")
-            self._last_send_confidence = "unknown"
-            self._log("info", "ℹ️ 验证码输入页通常已自动触发发送，先直接进入收码流程")
-            return True
+            return self._check_existing_code_page_status(page) is True
 
         self._stop_listen(page)
         self._log("error", "❌ 未找到发送验证码按钮")
@@ -589,14 +641,10 @@ class GeminiAutomation:
         if self._last_send_error or ui_state is False:
             self._last_send_confidence = "failed"
             return False
-        if network_ok or ui_state is True:
+        if ui_state is True:
             self._last_send_confidence = "confirmed"
             return True
-        code_input = page.ele("css:input[jsname='ovqh0b']", timeout=2) or page.ele("css:input[name='pinInput']", timeout=1)
-        if code_input:
-            self._last_send_confidence = "unknown"
-            return True
-        self._last_send_confidence = "unknown"
+        self._last_send_confidence = "failed" if network_ok else "unknown"
         return False
 
     def _verify_code_send_by_network(self, page) -> bool:
@@ -677,10 +725,19 @@ class GeminiAutomation:
 
     def _verify_code_send_status(self, page) -> Optional[bool]:
         """检测页面提示判断是否发送成功"""
-        time.sleep(random.uniform(1.5, 3))
         try:
-            success_keywords = ["验证码已发送", "code sent", "email sent", "check your email", "已发送"]
+            success_keywords = [
+                "验证码已发送。请查收您的邮件。",
+                "verification code has been sent. check your email.",
+                "验证码已发送",
+                "code sent",
+                "email sent",
+                "check your email",
+                "已发送",
+            ]
             error_keywords = [
+                "出了点问题。请稍后再试，或选择其他登录方法。",
+                "something went wrong. try again later or choose another sign-in method.",
                 "出了点问题",
                 "something went wrong",
                 "error",
@@ -694,19 +751,21 @@ class GeminiAutomation:
                 "css:[role='alert']",
                 "css:aside",
             ]
-            for selector in selectors:
-                try:
-                    elements = page.eles(selector, timeout=1)
-                    for elem in elements[:20]:
-                        text = (elem.text or "").strip()
-                        if not text:
-                            continue
-                        if any(kw in text for kw in error_keywords):
-                            return False
-                        if any(kw in text for kw in success_keywords):
-                            return True
-                except Exception:
-                    continue
+            for _ in range(6):
+                for selector in selectors:
+                    try:
+                        elements = page.eles(selector, timeout=0.5)
+                        for elem in elements[:20]:
+                            text = (elem.text or "").strip()
+                            if not text:
+                                continue
+                            if any(kw in text for kw in error_keywords):
+                                return False
+                            if any(kw in text for kw in success_keywords):
+                                return True
+                    except Exception:
+                        continue
+                time.sleep(0.8)
             return None
         except Exception:
             return None
@@ -876,12 +935,13 @@ class GeminiAutomation:
                             self._last_send_confidence = "failed"
                             self._stop_listen(page)
                             return False
-                        if network_ok or ui_state is True:
+                        if ui_state is True:
                             self._last_send_confidence = "confirmed"
-                        else:
-                            self._last_send_confidence = "unknown"
+                            self._stop_listen(page)
+                            return True
+                        self._last_send_confidence = "failed" if network_ok else "unknown"
                         self._stop_listen(page)
-                        return True
+                        return False
                     except Exception:
                         pass
         except Exception:
