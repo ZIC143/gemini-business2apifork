@@ -3,20 +3,26 @@ Gemini自动化登录模块（用于新账号注册）
 """
 import os
 import json
+import platform
 import random
 import re
 import string
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List
 from urllib.parse import quote
+
+try:
+    import requests as _requests
+except ImportError:
+    _requests = None
 
 from DrissionPage import ChromiumPage, ChromiumOptions
 from core.base_task_service import TaskCancelledError
 
 
 # 常量
-AUTH_HOME_URL = "https://auth.business.gemini.google/login"
+AUTH_HOME_URL = "https://business.gemini.google"
 
 # Linux 下常见的 Chromium 路径
 CHROMIUM_PATHS = [
@@ -71,6 +77,7 @@ COMMON_VIEWPORTS = [
 BROWSER_MODE_NORMAL = "normal"
 BROWSER_MODE_SILENT = "silent"
 BROWSER_MODE_HEADLESS = "headless"
+STEALTH_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "assets", "stealth.min.js")
 
 
 def _find_chromium_path() -> Optional[str]:
@@ -111,6 +118,7 @@ class GeminiAutomation:
         self._user_data_dir = None
         self._last_send_error = ""
         self._last_send_confidence = "unknown"
+        self._auth_use_url_submit = True
 
     def _is_on_code_input_page(self, page) -> bool:
         """判断当前是否已进入验证码输入页面。"""
@@ -177,9 +185,32 @@ class GeminiAutomation:
             self._cleanup_user_data(user_data_dir)
             self._user_data_dir = None
 
+    def _fetch_geoip(self) -> dict:
+        """通过 api.ip.sb/geoip 获取出口 IP 的地理信息，失败时返回空字典。"""
+        if _requests is None:
+            return {}
+        try:
+            proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+            resp = _requests.get(
+                "https://api.ip.sb/geoip",
+                timeout=10,
+                proxies=proxies,
+                headers={"User-Agent": self.user_agent or "Mozilla/5.0"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            self._log("info", f"🌐 GeoIP: {data.get('ip')} / {data.get('country_code')} / {data.get('timezone')}")
+            return data
+        except Exception as e:
+            self._log("warning", f"⚠️ GeoIP 获取失败: {e}")
+            return {}
+
     def _create_page(self) -> ChromiumPage:
         """创建浏览器页面"""
+        geoip = self._fetch_geoip()
         options = ChromiumOptions()
+        is_linux = platform.system().lower() == "linux"
+        is_windows = platform.system().lower() == "windows"
 
         # 自动检测 Chromium 浏览器路径（Linux/Docker 环境）
         chromium_path = _find_chromium_path()
@@ -187,10 +218,17 @@ class GeminiAutomation:
             options.set_browser_path(chromium_path)
 
         options.set_argument("--incognito")
-        options.set_argument("--no-sandbox")
-        options.set_argument("--disable-dev-shm-usage")
-        options.set_argument("--disable-setuid-sandbox")
-        options.set_argument("--disable-blink-features=AutomationControlled")
+        # 禁用所有扩展，避免加载本机扩展（如 xDown）干扰自动化
+        options.set_argument("--disable-extensions")
+        options.set_argument("--disable-component-extensions-with-background-pages")
+        # 该参数在 Windows 上可能提示不受支持，仅在 Linux 启用
+        if is_linux:
+            options.set_argument("--disable-blink-features=AutomationControlled")
+        # 部分 sandbox/dev-shm 参数仅在 Linux 容器环境下有意义，Windows 下会提示不受支持
+        if is_linux:
+            options.set_argument("--no-sandbox")
+            options.set_argument("--disable-dev-shm-usage")
+            options.set_argument("--disable-setuid-sandbox")
 
         # 随机窗口尺寸（避免固定分辨率成为指纹）
         vw, vh = random.choice(COMMON_VIEWPORTS)
@@ -204,12 +242,28 @@ class GeminiAutomation:
         options.set_pref("webrtc.multiple_routes_enabled", False)
         options.set_pref("webrtc.nonproxied_udp_enabled", False)
 
-        # 语言设置（确保使用中文界面）
-        options.set_argument("--lang=zh-CN")
-        options.set_pref("intl.accept_languages", "zh-CN,zh")
+        # 语言设置（根据 GeoIP 匹配，回退英文）
+        _cc = geoip.get("country_code", "").upper()
+        _lang_map = {
+            "CN": ("zh-CN", "zh-CN,zh,en-US,en"),
+            "TW": ("zh-TW", "zh-TW,zh,en-US,en"),
+            "HK": ("zh-HK", "zh-HK,zh,en-US,en"),
+            "JP": ("ja-JP", "ja-JP,ja,en-US,en"),
+            "KR": ("ko-KR", "ko-KR,ko,en-US,en"),
+            "DE": ("de-DE", "de-DE,de,en-US,en"),
+            "FR": ("fr-FR", "fr-FR,fr,en-US,en"),
+            "BR": ("pt-BR", "pt-BR,pt,en-US,en"),
+            "RU": ("ru-RU", "ru-RU,ru,en-US,en"),
+        }
+        _lang_arg, _lang_pref = _lang_map.get(_cc, ("en-US", "en-US,en"))
+        options.set_argument(f"--lang={_lang_arg}")
+        options.set_pref("intl.accept_languages", _lang_pref)
 
         if self.proxy:
+            self._log("info", f"🌐 浏览器代理已启用: {self.proxy}")
             options.set_argument(f"--proxy-server={self.proxy}")
+        else:
+            self._log("info", "🌐 浏览器代理未启用")
 
         if self.browser_mode == BROWSER_MODE_HEADLESS:
             # 使用新版无头模式，更接近真实浏览器
@@ -234,9 +288,7 @@ class GeminiAutomation:
         # 静默模式：启动后立即最小化窗口（Windows）
         if self.browser_mode == BROWSER_MODE_SILENT:
             try:
-                import platform
-                if platform.system() == "Windows":
-                    import time
+                if is_windows:
                     import ctypes
                     time.sleep(0.5)  # 等待窗口创建
                     # 查找 Chrome 窗口并最小化
@@ -259,19 +311,113 @@ class GeminiAutomation:
             except Exception:
                 pass
 
-        # 最小化 JS 注入：只设置 window.chrome（不使用 Object.defineProperty，避免被 reCAPTCHA 检测）
-        # 注意：DrissionPage 不像 Selenium 那样暴露 navigator.webdriver，无需额外隐藏
+        # Windows 下该启动参数可能不稳定，增加 CDP 兜底
+        if is_windows:
+            try:
+                page.run_cdp("Emulation.setAutomationOverride", enabled=False)
+            except Exception:
+                pass
+
+        # 根据 GeoIP 设置时区和地理坐标
+        _tz = geoip.get("timezone", "")
+        if _tz:
+            try:
+                page.run_cdp("Emulation.setTimezoneOverride", timezoneId=_tz)
+            except Exception:
+                pass
+        _lat = geoip.get("latitude")
+        _lon = geoip.get("longitude")
+        if _lat is not None and _lon is not None:
+            try:
+                page.run_cdp("Emulation.setGeolocationOverride",
+                             latitude=_lat, longitude=_lon, accuracy=20)
+            except Exception:
+                pass
+
+        # 优先注入本地 stealth 脚本；缺失时回退到内联脚本
+        stealth_script = self._load_stealth_script(geoip)
         try:
-            page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source="""
-                // 确保 window.chrome 存在（headless 模式下可能缺失）
-                if (!window.chrome) {
-                    window.chrome = {runtime: {}, loadTimes: function(){return {}}, csi: function(){return {}}};
-                }
-            """)
+            page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source=stealth_script)
         except Exception:
             pass
 
         return page
+
+    def _load_stealth_script(self, geoip: dict = None) -> str:
+        """加载本地 stealth 脚本；文件不存在时返回内联兜底脚本。"""
+        geoip = geoip or {}
+        # 将 geoip 信息作为 JS 常量前置注入，供 stealth.min.js 内部读取
+        _cc = geoip.get("country_code", "").upper()
+        _lang_map = {
+            "CN": ["zh-CN", "zh", "en-US", "en"],
+            "TW": ["zh-TW", "zh", "en-US", "en"],
+            "HK": ["zh-HK", "zh", "en-US", "en"],
+            "JP": ["ja-JP", "ja", "en-US", "en"],
+            "KR": ["ko-KR", "ko", "en-US", "en"],
+            "DE": ["de-DE", "de", "en-US", "en"],
+            "FR": ["fr-FR", "fr", "en-US", "en"],
+            "BR": ["pt-BR", "pt", "en-US", "en"],
+            "RU": ["ru-RU", "ru", "en-US", "en"],
+        }
+        _langs = _lang_map.get(_cc, ["en-US", "en"])
+        _geoip_js = (
+            f"const __GEOIP__ = {{\n"
+            f"  languages: {json.dumps(_langs)},\n"
+            f"  platform: 'Win32'\n"
+            f"}};\n"
+        )
+        try:
+            if os.path.isfile(STEALTH_SCRIPT_PATH):
+                with open(STEALTH_SCRIPT_PATH, "r", encoding="utf-8") as f:
+                    script = f.read()
+                if script.strip():
+                    self._log("info", "🛡️ 已加载本地 stealth.min.js")
+                    return _geoip_js + script
+        except Exception as e:
+            self._log("warning", f"⚠️ 读取 stealth.min.js 失败: {e}")
+        self._log("warning", "⚠️ 未加载到 stealth.min.js，使用内联脚本兜底")
+        return """
+                // 确保 window.chrome 存在（headless 模式下可能缺失）
+                if (!window.chrome) {
+                    window.chrome = {runtime: {}, loadTimes: function(){return {}}, csi: function(){return {}}};
+                }
+                // Windows 场景下增加 webdriver 兜底，避免仅靠启动参数失效
+                try {
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                } catch (e) {}
+        """
+
+    def _selector_values(self, key: str, defaults: List[str]) -> List[str]:
+        """读取选择器/关键词配置，未配置时回退默认值。"""
+        try:
+            from core.config import config
+            cfg = getattr(config, "automation_selectors", None)
+            value = getattr(cfg, key, None) if cfg else None
+            if isinstance(value, list):
+                normalized = [str(item).strip() for item in value if str(item).strip()]
+                if normalized:
+                    return normalized
+        except Exception:
+            pass
+        return defaults
+
+    def _find_code_input(self, page, timeout_primary: int = 2, timeout_secondary: int = 1):
+        """按配置顺序查找验证码输入框。"""
+        selectors = self._selector_values("code_input_selectors", [
+            "css:input[jsname='ovqh0b']",
+            "css:input[type='tel']",
+            "css:input[name='pinInput']",
+            "css:input[autocomplete='one-time-code']",
+        ])
+        for idx, selector in enumerate(selectors):
+            try:
+                timeout = timeout_primary if idx == 0 else timeout_secondary
+                el = page.ele(selector, timeout=timeout)
+                if el:
+                    return el
+            except Exception:
+                continue
+        return None
 
     def _minimize_window(self, page) -> None:
         """尽力最小化窗口，减少对本地操作的干扰。"""
@@ -317,6 +463,11 @@ class GeminiAutomation:
 
     def _run_flow(self, page, email: str, mail_client, is_new_account: bool = False) -> dict:
         """执行登录流程（is_new_account=True 时启用注册专用的增强用户名处理）"""
+        self._last_send_error = ""
+
+        # 配置了代理时，先探测浏览器出口 IP，便于排查代理是否生效
+        if self.proxy:
+            self._probe_proxy_ip(page)
 
         # 记录任务开始时间，用于邮件时间过滤（全流程固定，不随重发更新）
         from datetime import datetime
@@ -371,24 +522,39 @@ class GeminiAutomation:
         except Exception as e:
             self._log("warning", f"⚠️ Cookie 设置失败: {e}")
 
-        # Step 1.5: 通过 URL 方式提交邮箱（稳定，不触发风控）
+        # Step 1.5: 按配置选择邮箱提交方式（默认页面输入）
+        from core.config import config
+        use_url_submit = bool(getattr(config.basic, "auth_use_url_submit", True))
+        self._auth_use_url_submit = use_url_submit
         login_hint = quote(email, safe="")
         login_url = f"https://auth.business.gemini.google/login/email?continueUrl=https%3A%2F%2Fbusiness.gemini.google%2F&loginHint={login_hint}&xsrfToken={xsrf_token}"
+        if use_url_submit:
+            # 先启动网络监听，再导航（避免漏掉页面加载期间的请求）
+            try:
+                page.listen.start(
+                    targets=["batchexecute"],
+                    is_regex=False,
+                    method=("POST",),
+                    res_type=("XHR", "FETCH"),
+                )
+            except Exception:
+                pass
+            self._log("info", "📧 使用 URL 方式提交邮箱...")
+            page.get(login_url, timeout=self.timeout)
+            time.sleep(random.uniform(3, 5))
+        else:
+            self._log("info", "📧 使用页面输入方式提交邮箱...")
+            if not self._submit_email_by_input(page, email):
+                self._log("error", "❌ 页面输入邮箱失败")
+                self._save_screenshot(page, "email_submit_by_input_failed")
+                return {"success": False, "error": "email submit by input failed"}
 
-        # 先启动网络监听，再导航（避免漏掉页面加载期间的请求）
-        try:
-            page.listen.start(
-                targets=["batchexecute"],
-                is_regex=False,
-                method=("POST",),
-                res_type=("XHR", "FETCH"),
-            )
-        except Exception:
-            pass
-
-        self._log("info", "📧 使用 URL 方式提交邮箱...")
-        page.get(login_url, timeout=self.timeout)
-        time.sleep(random.uniform(3, 5))
+        # 邮箱提交后立即检测“出了点问题/选择其他登录方法”等拦截提示
+        if self._has_resend_error_within_window(page, window_seconds=10):
+            blocked_error = self._last_send_error or "send_ui_retry_later"
+            self._log("error", "❌ 邮箱提交后10秒内出现“出了点问题/选择其他登录方法”，直接失败")
+            self._save_screenshot(page, "email_submit_ui_blocked")
+            return {"success": False, "error": f"email submit blocked by ui message: {blocked_error}"}
 
         # 模拟真实用户行为：页面加载后随机滚动
         self._random_scroll(page)
@@ -441,6 +607,10 @@ class GeminiAutomation:
 
             if send_ok:
                 break
+            if self._last_send_error in ("send_ui_retry_later", "send_ui_alt_login_required"):
+                self._log("error", "❌ 页面提示“出了点问题/选择其他登录方法”，直接终止本次注册")
+                self._save_screenshot(page, "send_code_ui_blocked")
+                return {"success": False, "error": f"send code blocked by ui message: {self._last_send_error}"}
             if send_round >= max_send_rounds:
                 self._log("error", "❌ 验证码发送失败（可能触发风控），建议更换代理IP")
                 self._save_screenshot(page, "send_code_button_failed")
@@ -458,17 +628,12 @@ class GeminiAutomation:
 
         # Step 5: 轮询邮件获取验证码（3次，每次5秒间隔）
         poll_since_time = task_start_time - timedelta(seconds=30)
-        code = None
-        if self._last_send_confidence == "confirmed":
-            first_timeout = 30
-            self._log("info", f"📬 验证码发送成功，开始检查邮箱 (窗口 {first_timeout}s, 发送状态={self._last_send_confidence})")
-            code = mail_client.poll_for_code(timeout=first_timeout, interval=5, since_time=poll_since_time)
-        else:
-            self._log("warning", f"⚠️ 验证码发送未确认成功，跳过邮箱检查并进入重发流程 (发送状态={self._last_send_confidence})")
+        # 邮件投递存在一定延迟：未确认发送成功时，给更长首轮等待窗口，降低误判超时概率
+        first_timeout = 30 if self._last_send_confidence == "confirmed" else 35
+        self._log("info", f"📬 等待邮箱验证码 (窗口 {first_timeout}s, 发送状态={self._last_send_confidence})")
+        code = mail_client.poll_for_code(timeout=first_timeout, interval=5, since_time=poll_since_time)
 
         if not code:
-            from core.config import config
-
             resend_attempts = int(getattr(config.retry, "verification_code_resend_count", 2) or 0)
             resend_attempts = max(0, min(5, resend_attempts))
             if resend_attempts <= 0:
@@ -481,7 +646,15 @@ class GeminiAutomation:
                 time.sleep(random.uniform(1.0, 2.0))
 
                 if not self._click_resend_code_button(page):
-                    self._log("warning", f"⚠️ 未找到重发按钮 ({resend_index}/{resend_attempts})")
+                    if self._last_send_error in ("send_ui_retry_later", "send_ui_alt_login_required"):
+                        self._log("error", "❌ 重发时页面提示“出了点问题/选择其他登录方法”，直接失败")
+                        self._save_screenshot(page, "resend_code_ui_blocked")
+                        return {"success": False, "error": f"resend blocked by ui message: {self._last_send_error}"}
+                    self._log("warning", f"⚠️ 未找到重发按钮 ({resend_index}/{resend_attempts})，继续等待邮箱")
+                    fallback_timeout = 20 if self._last_send_confidence == "confirmed" else 25
+                    code = mail_client.poll_for_code(timeout=fallback_timeout, interval=5, since_time=poll_since_time)
+                    if code:
+                        break
                     continue
 
                 if self._last_send_confidence != "confirmed":
@@ -598,9 +771,165 @@ class GeminiAutomation:
         self._log("info", "🎊 登录成功，提取配置...")
         return self._extract_config(page, email)
 
+    def _probe_proxy_ip(self, page) -> None:
+        """访问 ip.sb 并输出当前浏览器出口 IP。"""
+        try:
+            self._log("info", "🌐 代理探测: 正在访问 https://api.ip.sb/ip ...")
+            page.get("https://api.ip.sb/ip", timeout=min(self.timeout, 20))
+            time.sleep(random.uniform(0.8, 1.5))
+            body = page.ele("tag:body", timeout=3)
+            text = (body.text or "").strip() if body else ""
+            if not text:
+                self._log("warning", "⚠️ 代理探测未获取到有效响应")
+                return
+            self._log("info", f"🌐 代理探测结果: {text}")
+        except Exception as e:
+            self._log("warning", f"⚠️ 代理探测失败: {e}")
+
+    def _submit_email_by_input(self, page, email: str) -> bool:
+        """页面输入邮箱并点击“使用邮箱登录”入口。"""
+        input_selectors = self._selector_values("email_input_selectors", [
+            "css:input#email-input",
+            "css:input[name='loginHint']",
+            "css:input[jsname='YPqjbf']",
+            "css:input[type='email']",
+            "css:input[autocomplete='username']",
+            "css:input[name='identifier']",
+            "css:input[name='email']",
+        ])
+        use_email_keywords = self._selector_values("email_submit_button_keywords", [
+            "使用邮箱登录",
+            "通过电子邮件登录",
+            "通过电子邮件发送验证码",
+            "通过电子邮件发送",
+            "sign in with email",
+            "use email",
+            "continue with email",
+            "next",
+            "继续",
+            "下一步",
+        ])
+        clickable_selectors = self._selector_values("generic_clickable_selectors", ["tag:button", "tag:a", "css:[role='button']", "css:div[role='button']"])
+        preferred_submit_selectors = self._selector_values("email_submit_button_selectors", [
+            "css:button#log-in-button",
+            "css:button[jsname='jXw9Fb']",
+            "css:button[aria-label='使用邮箱继续']",
+        ])
+
+        # 最多尝试 3 轮，兼容页面慢加载
+        for _ in range(3):
+            email_input = None
+            for selector in input_selectors:
+                try:
+                    email_input = page.ele(selector, timeout=2)
+                    if email_input:
+                        break
+                except Exception:
+                    continue
+
+            # 未找到邮箱输入框时，先尝试点击“使用邮箱登录”入口
+            if not email_input:
+                for selector in clickable_selectors:
+                    try:
+                        elements = page.eles(selector, timeout=1)
+                        for el in elements[:50]:
+                            text = (el.text or "").strip().lower()
+                            if text and any(kw in text for kw in use_email_keywords):
+                                try:
+                                    self._human_click(page, el)
+                                    time.sleep(random.uniform(0.8, 1.5))
+                                    break
+                                except Exception:
+                                    continue
+                    except Exception:
+                        continue
+
+                # 再查一次输入框
+                for selector in input_selectors:
+                    try:
+                        email_input = page.ele(selector, timeout=1)
+                        if email_input:
+                            break
+                    except Exception:
+                        continue
+
+            if not email_input:
+                time.sleep(random.uniform(0.8, 1.4))
+                continue
+
+            try:
+                if not self._simulate_human_input(email_input, email):
+                    email_input.input(email, clear=True)
+                time.sleep(random.uniform(0.3, 0.8))
+            except Exception:
+                continue
+
+            # 优先点击“使用邮箱登录/继续”按钮
+            clicked = False
+            for selector in preferred_submit_selectors:
+                try:
+                    btn = page.ele(selector, timeout=1)
+                    if btn:
+                        self._human_click(page, btn)
+                        clicked = True
+                        break
+                except Exception:
+                    continue
+
+            for selector in clickable_selectors:
+                if clicked:
+                    break
+                try:
+                    elements = page.eles(selector, timeout=1)
+                    for el in elements[:50]:
+                        text = (el.text or "").strip().lower()
+                        if text and any(kw in text for kw in use_email_keywords):
+                            try:
+                                self._human_click(page, el)
+                                clicked = True
+                                break
+                            except Exception:
+                                continue
+                    if clicked:
+                        break
+                except Exception:
+                    continue
+
+            # 按钮点击失败则回车兜底
+            if not clicked:
+                try:
+                    email_input.input("\n")
+                except Exception:
+                    pass
+
+            time.sleep(random.uniform(1.5, 3))
+
+            current_url = page.url or ""
+            # 出现验证码输入框、发送按钮或 URL 跳转都视为提交成功
+            if self._find_code_input(page, timeout_primary=1, timeout_secondary=1) or page.ele("#sign-in-with-email", timeout=1):
+                return True
+            if "login/email" in current_url or "verify-oob-code" in current_url or "business.gemini.google" in current_url:
+                return True
+
+        return False
+
+    def _classify_send_error_text(self, text: str) -> str:
+        """对发送验证码相关错误文案做分类，便于差异化重试。"""
+        value = (text or "").strip().lower()
+        if not value:
+            return ""
+        if "选择其他登录方法" in value:
+            return "send_ui_alt_login_required"
+        if any(kw in value for kw in ("出了点问题", "出了问题", "稍后再试", "something went wrong")):
+            return "send_ui_retry_later"
+        return ""
+
     def _click_send_code_button(self, page) -> bool:
         """点击发送验证码按钮（如果需要）"""
+        start_at = time.time()
+        hard_timeout_seconds = 25
         time.sleep(random.uniform(1.5, 3))
+        self._log("info", "🔎 正在定位发送验证码入口...")
         try:
             page.listen.start(
                 targets=["batchexecute"],
@@ -617,7 +946,12 @@ class GeminiAutomation:
         # 方法1: 直接通过ID查找
         direct_btn = page.ele("#sign-in-with-email", timeout=5)
         if direct_btn:
+            self._log("info", "✅ 命中发送按钮ID: #sign-in-with-email")
             for attempt in range(1, max_send_attempts + 1):
+                if time.time() - start_at > hard_timeout_seconds:
+                    self._log("error", f"❌ 发送按钮点击超时（>{hard_timeout_seconds}s）")
+                    self._stop_listen(page)
+                    return False
                 try:
                     self._last_send_error = ""
                     self._human_click(page, direct_btn)
@@ -627,6 +961,10 @@ class GeminiAutomation:
                     delay = retry_delays[min(attempt - 1, len(retry_delays) - 1)]
                     if self._last_send_error == "captcha_check_failed":
                         self._log("error", f"❌ 触发风控，建议更换代理IP ({attempt}/{max_send_attempts})")
+                    elif self._last_send_error in ("send_ui_retry_later", "send_ui_alt_login_required"):
+                        self._log("error", f"❌ 页面提示不可继续发送 ({self._last_send_error})")
+                        self._stop_listen(page)
+                        return False
                     else:
                         self._log("warning", f"⚠️ 发送失败，{delay}秒后重试 ({attempt}/{max_send_attempts})")
                     time.sleep(delay)
@@ -636,13 +974,26 @@ class GeminiAutomation:
             return False
 
         # 方法2: 通过关键词查找
-        keywords = ["通过电子邮件发送验证码", "通过电子邮件发送", "email", "Email", "Send code", "Send verification", "Verification code"]
+        keywords = self._selector_values("send_code_button_keywords", ["通过电子邮件发送验证码", "通过电子邮件发送", "email", "Email", "Send code", "Send verification", "Verification code"])
         try:
-            buttons = page.eles("tag:button")
-            for btn in buttons:
-                text = (btn.text or "").strip()
-                if text and any(kw in text for kw in keywords):
+            scan_selectors = self._selector_values("generic_clickable_selectors", ["tag:button", "tag:a", "css:[role='button']", "css:div[role='button']"])
+            for scan_selector in scan_selectors:
+                if time.time() - start_at > hard_timeout_seconds:
+                    self._log("error", f"❌ 搜索发送按钮超时（>{hard_timeout_seconds}s）")
+                    self._stop_listen(page)
+                    return False
+                self._log("info", f"🔍 扫描发送按钮选择器: {scan_selector}")
+                buttons = page.eles(scan_selector, timeout=2)
+                for btn in buttons[:80]:
+                    text = (btn.text or "").strip()
+                    if not (text and any(kw in text for kw in keywords)):
+                        continue
+                    self._log("info", f"✅ 命中发送按钮文案: {text[:40]}")
                     for attempt in range(1, max_send_attempts + 1):
+                        if time.time() - start_at > hard_timeout_seconds:
+                            self._log("error", f"❌ 发送按钮点击超时（>{hard_timeout_seconds}s）")
+                            self._stop_listen(page)
+                            return False
                         try:
                             self._last_send_error = ""
                             self._human_click(page, btn)
@@ -652,6 +1003,10 @@ class GeminiAutomation:
                             delay = retry_delays[min(attempt - 1, len(retry_delays) - 1)]
                             if self._last_send_error == "captcha_check_failed":
                                 self._log("error", f"❌ 触发风控，建议更换代理IP ({attempt}/{max_send_attempts})")
+                            elif self._last_send_error in ("send_ui_retry_later", "send_ui_alt_login_required"):
+                                self._log("error", f"❌ 页面提示不可继续发送 ({self._last_send_error})")
+                                self._stop_listen(page)
+                                return False
                             else:
                                 self._log("warning", f"⚠️ 发送失败，{delay}秒后重试 ({attempt}/{max_send_attempts})")
                             time.sleep(delay)
@@ -671,7 +1026,27 @@ class GeminiAutomation:
         # 检查是否已经在验证码输入页面
         if self._is_on_code_input_page(page):
             self._stop_listen(page)
-            return self._check_existing_code_page_status(page) is True
+            self._log("info", "✅ 已在验证码输入页面")
+            page_status = self._check_existing_code_page_status(page)
+            if page_status is True:
+                return True
+            if page_status is False:
+                if self._auth_use_url_submit:
+                    self._log("warning", "⚠️ URL提交模式下已进入验证码页，但检测到发送失败，交给外层重试逻辑处理")
+                    return False
+            if self._last_send_confidence == "failed":
+                self._last_send_confidence = "unknown"
+            if self._auth_use_url_submit:
+                self._log("info", "⏭️ URL提交模式：先等待首轮验证码，不立即点击重发")
+                return True
+            if self._click_resend_code_button(page):
+                self._log("info", "✅ 已点击重新发送按钮")
+                return True
+            if self._last_send_error in ("send_ui_retry_later", "send_ui_alt_login_required"):
+                self._log("error", f"❌ 重发失败且页面提示不可继续 ({self._last_send_error})")
+                return False
+            self._log("warning", "⚠️ 未找到重新发送按钮，继续流程")
+            return True
 
         self._stop_listen(page)
         self._log("error", "❌ 未找到发送验证码按钮")
@@ -695,7 +1070,11 @@ class GeminiAutomation:
         if ui_state is True:
             self._last_send_confidence = "confirmed"
             return True
-        self._last_send_confidence = "failed" if network_ok else "unknown"
+        code_input = self._find_code_input(page, timeout_primary=2, timeout_secondary=1)
+        if code_input:
+            self._last_send_confidence = "unknown"
+            return True
+        self._last_send_confidence = "unknown"
         return False
 
     def _verify_code_send_by_network(self, page) -> bool:
@@ -778,39 +1157,60 @@ class GeminiAutomation:
         """检测页面提示判断是否发送成功"""
         try:
             success_keywords = [
-                "验证码已发送。请查收您的邮件。",
-                "verification code has been sent. check your email.",
-                "验证码已发送",
-                "code sent",
-                "email sent",
-                "check your email",
-                "已发送",
+                kw.lower() for kw in self._selector_values(
+                    "send_status_success_keywords",
+                    [
+                        "验证码已发送。请查收您的邮件。",
+                        "verification code has been sent. check your email.",
+                        "验证码已发送",
+                        "code sent",
+                        "email sent",
+                        "check your email",
+                        "已发送",
+                    ],
+                )
             ]
             error_keywords = [
-                "出了点问题。请稍后再试，或选择其他登录方法。",
-                "something went wrong. try again later or choose another sign-in method.",
-                "出了点问题",
-                "something went wrong",
-                "error",
-                "failed",
-                "try again",
-                "稍后再试",
-                "选择其他登录方法"
+                kw.lower() for kw in self._selector_values(
+                    "send_status_error_keywords",
+                    [
+                        "出了点问题。请稍后再试，或选择其他登录方法。",
+                        "something went wrong. try again later or choose another sign-in method.",
+                        "出了点问题",
+                        "出了问题",
+                        "something went wrong",
+                        "error",
+                        "failed",
+                        "try again",
+                        "稍后再试",
+                        "选择其他登录方法",
+                    ],
+                )
             ]
-            selectors = [
-                "css:.zyTWof-gIZMF",
-                "css:[role='alert']",
-                "css:aside",
-            ]
+            selectors = self._selector_values("status_message_selectors", ["css:.zyTWof-gIZMF", "css:[role='alert']", "css:aside"])
             for _ in range(8):
+                msg_box = page.ele("css:div.zyTWof-gIZMF", timeout=0.5)
+                if msg_box:
+                    msg_text = (msg_box.text or "").strip().lower()
+                    if msg_text:
+                        if any(kw in msg_text for kw in error_keywords):
+                            send_error_type = self._classify_send_error_text(msg_text)
+                            if send_error_type:
+                                self._last_send_error = send_error_type
+                            return False
+                        if any(kw in msg_text for kw in success_keywords):
+                            return True
                 for selector in selectors:
                     try:
                         elements = page.eles(selector, timeout=0.5)
                         for elem in elements[:20]:
-                            text = (elem.text or "").strip()
+                            text = (elem.text or "").strip().lower()
                             if not text:
                                 continue
                             if any(kw in text for kw in error_keywords):
+                                send_error_type = self._classify_send_error_text(text)
+                                if send_error_type:
+                                    self._last_send_error = send_error_type
                                 return False
                             if any(kw in text for kw in success_keywords):
                                 return True
@@ -820,6 +1220,38 @@ class GeminiAutomation:
             return None
         except Exception:
             return None
+
+    def _has_resend_error_within_window(self, page, window_seconds: int = 10) -> bool:
+        """重发后在窗口期内轮询检测错误提示，命中即失败。"""
+        deadline = time.time() + max(1, int(window_seconds))
+        while time.time() < deadline:
+            try:
+                error_keywords = self._selector_values("send_status_error_keywords", ["出了点问题", "出了问题", "something went wrong", "error", "failed", "try again", "稍后再试", "选择其他登录方法"])
+                msg_box = page.ele("css:div.zyTWof-gIZMF", timeout=1)
+                if msg_box:
+                    msg_text = (msg_box.text or "").strip().lower()
+                    if msg_text and any(kw in msg_text for kw in error_keywords):
+                        send_error_type = self._classify_send_error_text(msg_text)
+                        if send_error_type:
+                            self._last_send_error = send_error_type
+                        return True
+                selectors = self._selector_values("status_message_selectors", ["css:.zyTWof-gIZMF", "css:[role='alert']", "css:aside", "tag:body"])
+                for selector in selectors:
+                    try:
+                        elements = page.eles(selector, timeout=1)
+                        for elem in elements[:20]:
+                            text = (elem.text or "").strip().lower()
+                            if text and any(kw in text for kw in error_keywords):
+                                send_error_type = self._classify_send_error_text(text)
+                                if send_error_type:
+                                    self._last_send_error = send_error_type
+                                return True
+                    except Exception:
+                        continue
+            except Exception:
+                return False
+            time.sleep(1)
+        return False
 
     def _truncate_text(self, text: str, max_len: int = 2000) -> str:
         if text is None:
@@ -874,12 +1306,12 @@ class GeminiAutomation:
 
     def _wait_for_code_input(self, page, timeout: int = 30):
         """等待验证码输入框出现"""
-        selectors = [
+        selectors = self._selector_values("code_input_selectors", [
             "css:input[jsname='ovqh0b']",
             "css:input[type='tel']",
             "css:input[name='pinInput']",
             "css:input[autocomplete='one-time-code']",
-        ]
+        ])
         for _ in range(timeout // 2):
             for selector in selectors:
                 try:
@@ -971,15 +1403,42 @@ class GeminiAutomation:
         except Exception:
             pass
 
-        # 查找包含重新发送关键词的按钮（与 _find_verify_button 相反）
+        # 查找包含重新发送关键词的控件（按钮/链接/角色按钮）
+        resend_keywords = self._selector_values("resend_button_keywords", [
+            "重新发送验证码",
+            "重新发送",
+            "重新获取",
+            "再次发送",
+            "获取新验证码",
+            "resend",
+            "send again",
+            "resend code",
+            "new code",
+            "try again",
+        ])
+        candidate_selectors = self._selector_values("generic_clickable_selectors", [
+            "tag:button",
+            "tag:a",
+            "css:[role='button']",
+            "css:div[role='button']",
+        ])
         try:
-            buttons = page.eles("tag:button")
-            for btn in buttons:
-                text = (btn.text or "").strip().lower()
-                if text and ("重新" in text or "resend" in text):
+            for selector in candidate_selectors:
+                elements = page.eles(selector, timeout=1)
+                for btn in elements[:50]:
+                    text = (btn.text or "").strip().lower()
+                    if not text:
+                        continue
+                    if not any(kw in text for kw in resend_keywords):
+                        continue
                     try:
-                        self._log("info", f"🔄 点击重新发送按钮")
+                        self._log("info", "🔄 点击重新发送按钮")
                         self._human_click(page, btn)
+                        if self._has_resend_error_within_window(page, window_seconds=10):
+                            self._log("error", "❌ 重发后10秒内出现“出了点问题”，直接判定失败")
+                            self._last_send_confidence = "failed"
+                            self._stop_listen(page)
+                            return False
                         network_ok = self._verify_code_send_by_network(page)
                         ui_state = self._verify_code_send_status(page)
                         if self._last_send_error or ui_state is False:

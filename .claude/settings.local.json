@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(sc:implement)",
+      "Skill(sc:implement:*)",
+      "Bash(curl -s --max-time 10 https://api.ip.sb/geoip)"
+    ]
+  }
+}

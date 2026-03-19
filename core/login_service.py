@@ -303,8 +303,14 @@ class LoginService(BaseTaskService[LoginTask]):
         elif selection.attempted_count > 0:
             failed_nodes = "、".join(attempt.node_name for attempt in selection.attempts)
             return {"success": False, "email": account_id, "error": f"连续 {selection.attempted_count} 个节点预检失败: {failed_nodes}；{selection.final_error or '节点预检失败'}"}
+        else:
+            log_cb("info", "ℹ️ 未启用节点代理，使用配置文件中的代理设置")
 
         log_cb("info", f"🌐 启动浏览器 (模式={browser_mode})...")
+        if proxy_for_auth:
+            log_cb("info", f"🌐 浏览器代理: {proxy_for_auth}")
+        else:
+            log_cb("info", "🌐 浏览器代理: 未启用")
 
         automation = GeminiAutomation(
             user_agent=self.user_agent,

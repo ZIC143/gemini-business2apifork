@@ -3084,12 +3084,13 @@ async def stream_chat_generator(session: str, text_content: str, file_ids: List[
     json_objects = []  # 收集所有响应对象用于图片解析
     file_ids_info = None  # 保存图片信息
 
-    async with http_client.stream(
+    # 流式对话走专用客户端，避免与普通请求抢连接池
+    async with http_client_chat.stream(
         "POST",
         "https://biz-discoveryengine.googleapis.com/v1alpha/locations/global/widgetStreamAssist",
         headers=headers,
         json=body,
-        timeout=300.0,
+        timeout=httpx.Timeout(300.0, connect=20.0, read=300.0, write=60.0, pool=60.0),
     ) as r:
         if r.status_code != 200:
             error_text = await r.aread()
