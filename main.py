@@ -1759,6 +1759,8 @@ async def admin_get_settings(request: Request):
             "cfmail_api_key": config.basic.cfmail_api_key,
             "cfmail_verify_ssl": config.basic.cfmail_verify_ssl,
             "cfmail_domain": config.basic.cfmail_domain,
+            "samplemail_base_url": config.basic.samplemail_base_url,
+            "samplemail_verify_ssl": config.basic.samplemail_verify_ssl,
             "browser_engine": config.basic.browser_engine,
             "browser_mode": config.basic.browser_mode,
             "browser_headless": config.basic.browser_headless,
@@ -1835,6 +1837,8 @@ async def admin_update_settings(request: Request, new_settings: dict = Body(...)
         basic.setdefault("cfmail_api_key", config.basic.cfmail_api_key)
         basic.setdefault("cfmail_verify_ssl", config.basic.cfmail_verify_ssl)
         basic.setdefault("cfmail_domain", config.basic.cfmail_domain)
+        basic.setdefault("samplemail_base_url", config.basic.samplemail_base_url)
+        basic.setdefault("samplemail_verify_ssl", config.basic.samplemail_verify_ssl)
         basic.setdefault("browser_engine", config.basic.browser_engine)
         basic.setdefault("browser_mode", config.basic.browser_mode)
         basic.setdefault("browser_headless", config.basic.browser_headless)
