@@ -297,6 +297,8 @@ class ConfigManager:
             cfmail_api_key=str(basic_data.get("cfmail_api_key") or "").strip(),
             cfmail_verify_ssl=_parse_bool(basic_data.get("cfmail_verify_ssl"), True),
             cfmail_domain=str(basic_data.get("cfmail_domain") or "").strip(),
+            samplemail_base_url=str(basic_data.get("samplemail_base_url") or "").strip(),
+            samplemail_verify_ssl=_parse_bool(basic_data.get("samplemail_verify_ssl"), True),
             browser_engine=basic_data.get("browser_engine") or "dp",
             browser_mode=browser_mode,
             browser_headless=browser_mode == "headless",
