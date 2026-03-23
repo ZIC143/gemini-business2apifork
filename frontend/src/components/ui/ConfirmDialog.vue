@@ -5,22 +5,20 @@
       class="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 px-4"
       @click.self="$emit('cancel')"
     >
-      <div class="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-2xl">
-        <p class="text-sm font-semibold text-foreground">{{ title }}</p>
-        <p class="mt-2 text-sm text-muted-foreground">{{ message }}</p>
+      <div class="ui-overlay-panel w-full max-w-sm shadow-2xl">
+        <p class="ui-dialog-title">{{ title }}</p>
+        <p class="ui-dialog-body">{{ message }}</p>
         <div class="mt-6 flex items-center justify-end gap-2">
           <button
             type="button"
-            class="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors
-                   hover:border-foreground hover:text-foreground"
+            class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center text-muted-foreground hover:border-foreground hover:text-foreground"
             @click="$emit('cancel')"
           >
             {{ cancelText }}
           </button>
           <button
             type="button"
-            class="rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground transition-opacity
-                   hover:opacity-90"
+            class="ui-btn ui-btn-xs ui-btn-primary min-w-14 justify-center"
             @click="$emit('confirm')"
           >
             {{ confirmText }}

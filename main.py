@@ -69,6 +69,7 @@ from core.account import (
     bulk_delete_accounts as _bulk_delete_accounts
 )
 from core.proxy_utils import parse_proxy_setting
+from core.version import get_update_status, get_version_info
 
 # 导入 Uptime 追踪器
 from core import uptime as uptime_tracker
@@ -814,6 +815,10 @@ async def health_check():
     """健康检查端点，用于 Docker HEALTHCHECK"""
     return {"status": "ok"}
 
+@app.get("/public/version")
+async def public_version():
+    return get_version_info()
+
 # ---------- Session 中间件配置 ----------
 from starlette.middleware.sessions import SessionMiddleware
 app.add_middleware(
@@ -1401,6 +1406,12 @@ async def admin_logout(request: Request):
     logger.info("[AUTH] Admin logout")
     return {"success": True}
 
+
+
+@app.get("/admin/version-check")
+@require_login()
+async def admin_version_check(request: Request):
+    return get_update_status()
 
 
 @app.get("/admin/stats")

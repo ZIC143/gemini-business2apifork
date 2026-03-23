@@ -31,16 +31,19 @@ const router = createRouter({
           path: '',
           name: 'dashboard',
           component: () => import('@/views/Dashboard.vue'),
+          meta: { keepAlive: true },
         },
         {
           path: 'accounts',
           name: 'accounts',
           component: () => import('@/views/Accounts.vue'),
+          meta: { keepAlive: true },
         },
         {
           path: 'settings',
           name: 'settings',
           component: () => import('@/views/Settings.vue'),
+          meta: { keepAlive: true },
         },
         {
           path: 'nodes',
@@ -51,43 +54,61 @@ const router = createRouter({
           path: 'logs',
           name: 'logs',
           component: () => import('@/views/Logs.vue'),
+          meta: { keepAlive: true },
         },
         {
           path: 'monitor',
           name: 'monitor',
           component: () => import('@/views/Monitor.vue'),
+          meta: { keepAlive: true },
         },
         {
           path: 'docs',
           name: 'docs',
           component: () => import('@/views/Docs.vue'),
+          meta: { keepAlive: true },
         },
         {
           path: 'gallery',
           name: 'gallery',
           component: () => import('@/views/Gallery.vue'),
+          meta: { keepAlive: true },
         },
       ],
     },
   ],
 })
 
-// 路由守卫
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
-  // 需要认证的路由
-  if (to.meta.requiresAuth) {
-    const isAuthenticated = await authStore.checkAuth()
-    if (!isAuthenticated) {
-      return { name: 'login' }
+  if (to.name === 'login') {
+    if (authStore.isLoggedIn) {
+      return { name: 'dashboard' }
     }
+    // 从受保护页面被重定向到登录页时，不再重复探测，避免连续 401
+    if (typeof to.query.redirect === 'string' && to.query.redirect.length > 0) {
+      return true
+    }
+    const loggedIn = await authStore.checkAuth()
+    if (loggedIn) {
+      return { name: 'dashboard' }
+    }
+    return true
   }
 
-  // 已登录用户访问登录页，重定向到首页
-  if (to.name === 'login' && authStore.isLoggedIn) {
-    return { name: 'dashboard' }
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth !== false)
+  if (!requiresAuth) {
+    return true
   }
+
+  const loggedIn = await authStore.checkAuth()
+  if (!loggedIn) {
+    const redirect = to.fullPath || '/'
+    return { name: 'login', query: { redirect } }
+  }
+
+  return true
 })
 
 export default router

@@ -15,6 +15,11 @@ export const authApi = {
   logout: () =>
     apiClient.post('/logout'),
 
+  // 必须调用需要鉴权的接口，不能用 /health（公开接口），否则登出后会被误判为已登录
   checkAuth: () =>
-    apiClient.get('/health'),
+    apiClient.get('/admin/stats', {
+      headers: {
+        'X-Skip-Auth-Redirect': '1',
+      },
+    }),
 }

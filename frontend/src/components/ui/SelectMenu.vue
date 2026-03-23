@@ -1,9 +1,9 @@
 <template>
-  <div ref="root" class="relative w-full">
+  <div ref="root" class="relative">
     <button
+      ref="trigger"
       type="button"
-      class="flex w-full items-center justify-between gap-2 rounded-full border border-input bg-background px-4 py-2 text-sm
-             text-foreground transition-colors hover:border-primary"
+      class="ui-input-sm flex w-full items-center justify-between gap-2 text-foreground hover:border-primary"
       @click="toggle"
     >
       <span class="truncate">{{ currentLabel }}</span>
@@ -11,17 +11,20 @@
         <path d="M5 7l5 6 5-6H5z" />
       </svg>
     </button>
+  </div>
+
+  <Teleport to="body">
     <div
       v-if="open"
-      class="absolute right-0 z-30 w-full space-y-1 rounded-2xl border border-border bg-card p-2 shadow-lg"
-      :class="menuPositionClass"
+      ref="menu"
+      class="ui-floating-panel fixed z-[1000] space-y-1"
+      :style="menuStyle"
     >
       <button
         v-for="option in normalizedOptions"
         :key="option.value"
         type="button"
-        class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-colors
-               hover:bg-accent"
+        class="ui-menu-item"
         :class="isSelected(option.value) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'"
         @click="select(option.value)"
       >
@@ -29,11 +32,11 @@
         <span v-if="isSelected(option.value)" class="text-xs">OK</span>
       </button>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 type Option = { label: string; value: string }
 
@@ -51,34 +54,87 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
+const menu = ref<HTMLElement | null>(null)
+const menuPosition = ref({ top: 0, left: 0, width: 0 })
 
 const normalizedOptions = computed<Option[]>(() =>
-  props.options.map(option =>
+  props.options.map((option) =>
     typeof option === 'string' ? { label: option, value: option } : option
   )
 )
 
+const defaultPlaceholder = '\u8bf7\u9009\u62e9'
+
 const currentLabel = computed(() => {
   if (props.multiple) {
     const values = Array.isArray(props.modelValue) ? props.modelValue : []
-    if (!values.length) return props.placeholder || '请选择'
+    if (!values.length) return props.placeholder || defaultPlaceholder
     if (values.length === 1) {
-      const match = normalizedOptions.value.find(option => option.value === values[0])
+      const match = normalizedOptions.value.find((option) => option.value === values[0])
       return match?.label || values[0]
     }
-    return `已选 ${values.length} 项`
+    return `\u5df2\u9009 ${values.length} \u9879`
   }
 
-  const match = normalizedOptions.value.find(option => option.value === props.modelValue)
-  return match?.label || String(props.modelValue ?? '')
+  const rawValue = props.modelValue == null ? '' : String(props.modelValue)
+  const match = normalizedOptions.value.find((option) => String(option.value) === rawValue)
+  if (match) return match.label
+  if (!rawValue.trim()) return props.placeholder || defaultPlaceholder
+  return rawValue
 })
 
-const menuPositionClass = computed(() =>
-  props.placement === 'up' ? 'bottom-full mb-2' : 'mt-2'
-)
+const menuStyle = computed(() => ({
+  top: `${menuPosition.value.top}px`,
+  left: `${menuPosition.value.left}px`,
+  width: `${menuPosition.value.width}px`,
+}))
+
+const updateMenuPosition = () => {
+  if (!trigger.value) return
+
+  const rect = trigger.value.getBoundingClientRect()
+  const width = rect.width
+  const spacing = 8
+  const padding = 8
+
+  let left = rect.left
+  let top = rect.bottom + spacing
+
+  if (props.placement === 'up' && menu.value) {
+    top = rect.top - menu.value.offsetHeight - spacing
+  }
+
+  const maxLeft = window.innerWidth - width - padding
+  left = Math.min(Math.max(left, padding), Math.max(padding, maxLeft))
+
+  if (menu.value) {
+    const maxTop = window.innerHeight - menu.value.offsetHeight - padding
+    top = Math.min(Math.max(top, padding), Math.max(padding, maxTop))
+  } else {
+    top = Math.max(top, padding)
+  }
+
+  menuPosition.value = { top, left, width }
+}
+
+const openMenu = async () => {
+  open.value = true
+  await nextTick()
+  updateMenuPosition()
+  requestAnimationFrame(updateMenuPosition)
+}
+
+const closeMenu = () => {
+  open.value = false
+}
 
 const toggle = () => {
-  open.value = !open.value
+  if (open.value) {
+    closeMenu()
+    return
+  }
+  void openMenu()
 }
 
 const isSelected = (value: string) => {
@@ -92,26 +148,44 @@ const select = (value: string) => {
   if (props.multiple) {
     const current = Array.isArray(props.modelValue) ? props.modelValue : []
     const exists = current.includes(value)
-    const next = exists ? current.filter(item => item !== value) : [...current, value]
+    const next = exists ? current.filter((item) => item !== value) : [...current, value]
     emit('update:modelValue', next)
     return
   }
 
   emit('update:modelValue', value)
-  open.value = false
+  closeMenu()
 }
 
 const handleClickOutside = (event: MouseEvent) => {
-  if (!root.value) return
-  if (root.value.contains(event.target as Node)) return
-  open.value = false
+  const target = event.target as Node
+  if (root.value?.contains(target)) return
+  if (menu.value?.contains(target)) return
+  closeMenu()
+}
+
+const handleViewportChange = () => {
+  if (!open.value) return
+  updateMenuPosition()
+}
+
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    closeMenu()
+  }
 }
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('resize', handleViewportChange)
+  window.addEventListener('scroll', handleViewportChange, true)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('resize', handleViewportChange)
+  window.removeEventListener('scroll', handleViewportChange, true)
 })
 </script>

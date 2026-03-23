@@ -1,109 +1,103 @@
-﻿<template>
-  <div class="rounded-3xl border border-border bg-card p-6">
+<template>
+  <div class="ui-panel">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-base font-semibold text-foreground">管理日志</p>
-      <div class="text-xs text-muted-foreground">
-        自动刷新：{{ autoRefreshEnabled ? '开启' : '关闭' }}
-      </div>
+      <p class="ui-section-title">管理日志</p>
+      <p class="text-xs text-muted-foreground">当前 {{ parsedLogs.length }} 条</p>
     </div>
 
     <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <div class="rounded-2xl border border-border bg-card px-4 py-3 text-center">
+      <div class="ui-card-sm text-center">
         <div class="text-[11px] text-muted-foreground">总数</div>
         <div class="mt-1 text-lg font-semibold text-foreground">{{ stats?.memory.total ?? 0 }}</div>
       </div>
-      <div class="rounded-2xl border border-border bg-card px-4 py-3 text-center">
+      <div class="ui-card-sm text-center">
         <div class="text-[11px] text-muted-foreground">对话</div>
         <div class="mt-1 text-lg font-semibold text-foreground">{{ stats?.chat_count ?? 0 }}</div>
       </div>
-      <div class="rounded-2xl border border-border bg-card px-4 py-3 text-center">
+      <div class="ui-card-sm text-center">
         <div class="text-[11px] text-muted-foreground">INFO</div>
         <div class="mt-1 text-lg font-semibold text-foreground">{{ stats?.memory.by_level.INFO ?? 0 }}</div>
       </div>
-      <div class="rounded-2xl border border-border bg-card px-4 py-3 text-center">
+      <div class="ui-card-sm text-center">
         <div class="text-[11px] text-muted-foreground">WARNING</div>
         <div class="mt-1 text-lg font-semibold text-foreground">{{ stats?.memory.by_level.WARNING ?? 0 }}</div>
       </div>
-      <div class="rounded-2xl border border-border bg-card px-4 py-3 text-center">
+      <div class="ui-card-sm text-center">
         <div class="text-[11px] text-muted-foreground">ERROR</div>
-        <div class="mt-1 text-lg font-semibold" :class="stats?.memory.by_level.ERROR ? 'text-rose-600' : 'text-foreground'">
+        <div class="mt-1 text-lg font-semibold" :class="(stats?.memory.by_level.ERROR ?? 0) > 0 ? 'text-rose-600' : 'text-foreground'">
           {{ stats?.memory.by_level.ERROR ?? 0 }}
         </div>
       </div>
-      <div class="rounded-2xl border border-border bg-card px-4 py-3 text-center">
+      <div class="ui-card-sm text-center">
         <div class="text-[11px] text-muted-foreground">缓存上限</div>
         <div class="mt-1 text-lg font-semibold text-foreground">{{ stats?.memory.capacity ?? 0 }}</div>
       </div>
     </div>
 
-    <div class="mt-4 flex flex-wrap items-center gap-2 sm:flex-nowrap">
-      <div class="w-44 shrink-0">
-        <SelectMenu v-model="filters.level" :options="levelOptions" />
+    <div class="mt-4 w-full">
+      <div class="flex w-full flex-wrap items-center gap-2">
+        <div class="w-[150px] shrink-0">
+          <SelectMenu v-model="filters.level" :options="levelOptions" />
+        </div>
+        <input
+          v-model.trim="filters.search"
+          type="text"
+          placeholder="搜索日志内容..."
+          class="ui-input-sm min-w-[11rem] flex-1 md:min-w-[260px]"
+        />
+        <input
+          v-model.number="filters.limit"
+          type="number"
+          min="10"
+          max="1000"
+          step="100"
+          class="ui-input-sm w-[96px] shrink-0"
+        />
+        <button
+          type="button"
+          class="ui-btn ui-btn-sm ui-btn-outline shrink-0"
+          :disabled="isFetching"
+          @click="fetchLogs"
+        >
+          刷新
+        </button>
+        <button
+          type="button"
+          class="ui-btn ui-btn-sm ui-btn-outline shrink-0"
+          @click="exportLogs"
+        >
+          导出
+        </button>
+        <button
+          type="button"
+          class="ui-btn ui-btn-sm ui-btn-outline shrink-0"
+          @click="confirmOpen = true"
+        >
+          清空
+        </button>
+        <button
+          type="button"
+          class="ui-btn ui-btn-sm ui-btn-outline shrink-0"
+          @click="toggleView"
+        >
+          {{ rawView ? '切换结构化' : '切换原始' }}
+        </button>
+        <button
+          type="button"
+          class="ui-btn ui-btn-sm ui-btn-outline shrink-0"
+          @click="toggleDetailMode"
+        >
+          {{ detailMode === 'summary' ? '摘要模式' : '详情模式' }}
+        </button>
+        <button
+          type="button"
+          class="ui-btn ui-btn-sm ui-btn-outline shrink-0"
+          :class="autoRefreshEnabled ? 'border-primary text-primary' : ''"
+          @click="toggleAutoRefresh"
+        >
+          {{ autoRefreshEnabled ? '自动刷新 8s' : '自动刷新已关' }}
+        </button>
       </div>
-      <input
-        v-model.trim="filters.search"
-        type="text"
-        placeholder="搜索..."
-        class="min-w-[200px] flex-1 rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground sm:min-w-0"
-      />
-      <input
-        v-model.number="filters.limit"
-        type="number"
-        min="10"
-        max="1000"
-        step="100"
-        class="w-24 rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground"
-      />
-      <button
-        class="rounded-full border border-border px-4 py-2 text-xs font-medium text-foreground transition-colors
-               hover:border-primary hover:text-primary"
-        @click="fetchLogs"
-      >
-        查询
-      </button>
-      <button
-        class="rounded-full border border-border px-4 py-2 text-xs font-medium text-foreground transition-colors
-               hover:border-primary hover:text-primary"
-        @click="exportLogs"
-      >
-        导出
-      </button>
-      <button
-        class="rounded-full border border-border px-4 py-2 text-xs font-medium text-foreground transition-colors
-               hover:border-primary hover:text-primary"
-        @click="toggleView"
-      >
-        {{ rawView ? '结构化视图' : '原始视图' }}
-      </button>
-      <button
-        class="rounded-full px-4 py-2 text-xs font-medium transition-colors"
-        :class="detailMode === 'summary' ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'"
-        @click="toggleDetailMode"
-      >
-        {{ detailMode === 'summary' ? '摘要模式' : '详情模式' }}
-      </button>
-      <button
-        class="rounded-full px-4 py-2 text-xs font-medium transition-colors"
-        :class="autoRefreshEnabled ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'"
-        @click="toggleAutoRefresh"
-      >
-        自动刷新
-      </button>
-      <button
-        class="rounded-full px-4 py-2 text-xs font-medium transition-colors"
-        :class="hideTaskLogs ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'"
-        @click="hideTaskLogs = !hideTaskLogs"
-      >
-        隐藏刷新日志
-      </button>
-    </div>
-
-    <div v-if="statusMessage" class="mt-3 text-xs" :class="statusToneClass">
-      {{ statusMessage }}
-    </div>
-
-    <div v-if="errorMessage" class="mt-4 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
-      {{ errorMessage }}
     </div>
 
     <div
@@ -112,107 +106,121 @@
       class="scrollbar-slim mt-4 max-h-[60vh] overflow-x-auto overflow-y-auto rounded-2xl border border-border bg-muted/30 px-4 py-3 text-[11px] text-muted-foreground"
     >
       <pre class="whitespace-pre font-mono leading-relaxed">{{ rawLogView.text }}</pre>
+      <p v-if="rawLogView.limited" class="mt-2 text-[10px]">仅显示最近 {{ rawLogView.showing }} / {{ rawLogView.total }} 条</p>
     </div>
+
     <div
       v-else
       ref="structuredLogContainer"
-      class="scrollbar-slim mt-4 max-h-[60vh] space-y-3 overflow-y-auto rounded-2xl border border-border bg-card px-4 py-3"
+      class="scrollbar-slim ui-card-sm mt-4 max-h-[60vh] space-y-3 overflow-y-auto"
     >
-      <div v-if="detailMode === 'summary'" class="text-[11px] text-muted-foreground">
-        摘要模式仅保留关键事件（开始、结束、失败、切换、告警）。
-      </div>
       <div v-if="structuredView.ungrouped.length === 0 && structuredView.groups.length === 0" class="text-xs text-muted-foreground">
         暂无日志
       </div>
 
-      <div v-for="(log, index) in structuredView.ungrouped" :key="`u-${index}`">
-        <div class="cv-auto flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-muted-foreground">{{ log.time }}</span>
-            <span :class="levelBadgeClass(log.level)">{{ log.level }}</span>
-            <span
-              v-for="tag in log.tags"
-              :key="tag"
-              class="rounded px-2 py-0.5 text-[10px] font-semibold text-white"
-              :style="{ backgroundColor: getCategoryColor(tag) }"
-            >
-              {{ tag }}
-            </span>
-            <span
-              v-if="log.accountId"
-              class="text-[11px] font-semibold"
-              :style="{ color: getAccountColor(log.accountId) }"
-            >
-              {{ log.accountId }}
-            </span>
-          </div>
-          <div class="w-full text-foreground md:w-auto md:flex-1">
-            {{ log.text }}
-          </div>
+      <DynamicScroller
+        v-if="shouldVirtualizeUngrouped"
+        :items="structuredView.ungrouped"
+        key-field="rowId"
+        :min-item-size="54"
+        class="max-h-[26vh] overflow-y-auto pr-1"
+      >
+        <template #default="{ item: log, index }">
+          <DynamicScrollerItem :item="log" :active="true" :size-dependencies="[log.text, detailMode]">
+            <div :class="index > 0 ? 'pt-2' : ''">
+              <LogEntryRow
+                :time="log.time"
+                :text="log.text"
+                :badge-text="log.level"
+                :badge-class="levelBadgeClass(log.level)"
+                :tags="buildLogTags(log)"
+                :account-text="log.accountId"
+                :account-style="buildAccountStyle(log.accountId)"
+              />
+            </div>
+          </DynamicScrollerItem>
+        </template>
+      </DynamicScroller>
+      <template v-else>
+        <div v-for="(log, index) in structuredView.ungrouped" :key="`u-${log.rowId}-${index}`">
+          <LogEntryRow
+            :time="log.time"
+            :text="log.text"
+            :badge-text="log.level"
+            :badge-class="levelBadgeClass(log.level)"
+            :tags="buildLogTags(log)"
+            :account-text="log.accountId"
+            :account-style="buildAccountStyle(log.accountId)"
+          />
         </div>
-      </div>
+      </template>
 
-      <div v-for="group in structuredView.groups" :key="group.id" class="rounded-2xl border border-border bg-card">
-        <button
-          type="button"
-          class="flex w-full flex-wrap items-center gap-2 rounded-2xl bg-secondary/40 px-4 py-3 text-left text-xs transition hover:bg-secondary/60"
-          @click="toggleGroup(group.id)"
+      <RequestLogGroup
+        v-for="group in structuredView.groups"
+        :key="group.id"
+        :status-label="statusLabel(group.status)"
+        :status-badge-class="statusBadgeClass(group.status)"
+        :request-id="group.id"
+        :collapsed="isCollapsed(group.id)"
+        :count-text="`${group.logs.length} 条日志`"
+        :account-text="group.accountId"
+        :account-style="buildAccountStyle(group.accountId)"
+        :meta-texts="groupMetaTexts(group)"
+        :hint-text="groupHintText(group)"
+        @toggle="toggleGroup(group.id)"
+      >
+        <RequestLayerSection
+          v-for="section in getGroupLayerSections(group)"
+          :key="`${group.id}-${section.key}`"
+          :label="section.label"
+          :badge-class="section.badgeClass"
+          :count="section.logs.length"
         >
-          <span :class="statusBadgeClass(group.status)">{{ statusLabel(group.status) }}</span>
-          <span class="text-muted-foreground">req_{{ group.id }}</span>
-          <span v-if="group.accountId" class="text-xs font-semibold" :style="{ color: getAccountColor(group.accountId) }">
-            {{ group.accountId }}
-          </span>
-          <span v-if="group.model" class="text-muted-foreground">{{ group.model }}</span>
-          <span v-if="isGroupLimited(group)" class="text-[10px] text-muted-foreground">
-            仅显示最近 {{ groupLogLimit }} 条
-          </span>
-          <span class="text-muted-foreground">{{ group.logs.length }} 条日志</span>
-          <span
-            class="ml-auto text-muted-foreground transition-transform"
-            :class="{ 'rotate-90': !isCollapsed(group.id) }"
+          <DynamicScroller
+            v-if="shouldVirtualizeLayer(section.logs)"
+            :items="section.logs"
+            key-field="rowId"
+            :min-item-size="54"
+            class="max-h-[44vh] overflow-y-auto pr-1"
           >
-            ▸
-          </span>
-        </button>
-        <div v-if="!isCollapsed(group.id)" class="space-y-2 px-4 py-3">
-          <div
-            v-for="(log, logIndex) in visibleGroupLogs(group)"
-            :key="`${group.id}-${logIndex}`"
-            class="cv-auto flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs"
-          >
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="text-muted-foreground">{{ log.time }}</span>
-              <span :class="levelBadgeClass(log.level)">{{ log.level }}</span>
-              <span
-                v-for="tag in log.tags"
-                :key="tag"
-                class="rounded px-2 py-0.5 text-[10px] font-semibold text-white"
-                :style="{ backgroundColor: getCategoryColor(tag) }"
-              >
-                {{ tag }}
-              </span>
-              <span
-                v-if="log.accountId"
-                class="text-[11px] font-semibold"
-                :style="{ color: getAccountColor(log.accountId) }"
-              >
-                {{ log.accountId }}
-              </span>
-            </div>
-            <div class="w-full text-foreground md:w-auto md:flex-1">
-              {{ log.text }}
-            </div>
+            <template #default="{ item: log, index }">
+              <DynamicScrollerItem :item="log" :active="true" :size-dependencies="[log.text, detailMode]">
+                <div :class="index > 0 ? 'pt-2' : ''">
+                  <LogEntryRow
+                    :time="log.time"
+                    :text="log.text"
+                    :badge-text="log.level"
+                    :badge-class="levelBadgeClass(log.level)"
+                    :tags="buildLogTags(log)"
+                    :account-text="log.accountId"
+                    :account-style="buildAccountStyle(log.accountId)"
+                  />
+                </div>
+              </DynamicScrollerItem>
+            </template>
+          </DynamicScroller>
+          <div v-else class="space-y-2">
+            <LogEntryRow
+              v-for="(log, logIndex) in section.logs"
+              :key="`${group.id}-${section.key}-${log.rowId}-${logIndex}`"
+              :time="log.time"
+              :text="log.text"
+              :badge-text="log.level"
+              :badge-class="levelBadgeClass(log.level)"
+              :tags="buildLogTags(log)"
+              :account-text="log.accountId"
+              :account-style="buildAccountStyle(log.accountId)"
+            />
           </div>
-        </div>
-      </div>
+        </RequestLayerSection>
+      </RequestLogGroup>
     </div>
   </div>
 
   <ConfirmDialog
     :open="confirmOpen"
     title="确认操作"
-    message="确定要清空所有运行日志吗？"
+    message="确认要清空所有运行日志吗？"
     confirm-text="确认"
     cancel-text="取消"
     @confirm="clearLogs"
@@ -221,529 +229,47 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { logsApi } from '@/api'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import SelectMenu from '@/components/ui/SelectMenu.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import type { AdminLogStats, LogEntry } from '@/types/api'
+import LogEntryRow from '@/components/ai/LogEntryRow.vue'
+import RequestLayerSection from '@/components/ai/RequestLayerSection.vue'
+import RequestLogGroup from '@/components/ai/RequestLogGroup.vue'
+import { useLogsPage } from './logsPage/useLogsPage'
 
-type ParsedLogEntry = LogEntry & {
-  tags: string[]
-  accountId: string
-  text: string
-  reqId: string
-}
-
-type GroupedLog = {
-  id: string
-  logs: ParsedLogEntry[]
-  status: string
-  accountId: string
-  model: string
-}
-
-type GroupedLogState = {
-  ungrouped: ParsedLogEntry[]
-  groups: GroupedLog[]
-}
-
-const logs = ref<LogEntry[]>([])
-const parsedLogs = ref<ParsedLogEntry[]>([])
-const groupedLogs = ref<GroupedLogState>({ ungrouped: [], groups: [] })
-const stats = ref<AdminLogStats | null>(null)
-const errorMessage = ref('')
-const statusMessage = ref('')
-const statusTone = ref<'success' | 'error'>('success')
-const confirmOpen = ref(false)
-const autoRefreshEnabled = ref(true)
-const collapsedState = ref<Record<string, boolean>>({})
-const rawView = ref(true)
-const detailMode = ref<'summary' | 'detail'>('summary')
-const hideTaskLogs = ref(true)
-const rawLogContainer = ref<HTMLDivElement | null>(null)
-const structuredLogContainer = ref<HTMLDivElement | null>(null)
-const structuredRenderLimit = 1000
-const rawRenderLimit = 1000
-const groupLogLimit = 200
-const refreshIntervalMs = 3000
-let timer: number | undefined
-let isFetching = false
-
-const filters = reactive({
-  level: '',
-  search: '',
-  limit: 1000,
-})
-
-const levelOptions = [
-  { label: '全部', value: '' },
-  { label: 'INFO', value: 'INFO' },
-  { label: 'WARNING', value: 'WARNING' },
-  { label: 'ERROR', value: 'ERROR' },
-]
-
-const CATEGORY_COLORS: Record<string, string> = {
-  SYSTEM: '#9e9e9e',
-  CONFIG: '#607d8b',
-  LOG: '#9e9e9e',
-  AUTH: '#4caf50',
-  SESSION: '#00bcd4',
-  FILE: '#ff9800',
-  CHAT: '#2196f3',
-  API: '#8bc34a',
-  CACHE: '#9c27b0',
-  ACCOUNT: '#f44336',
-  MULTI: '#673ab7',
-}
-
-const ACCOUNT_COLORS: Record<string, string> = {
-  account_1: '#9c27b0',
-  account_2: '#e91e63',
-  account_3: '#00bcd4',
-  account_4: '#4caf50',
-  account_5: '#ff9800',
-}
-
-const statusToneClass = computed(() =>
-  statusTone.value === 'error' ? 'text-destructive' : 'text-muted-foreground'
-)
-
-const getCategoryColor = (category: string) => CATEGORY_COLORS[category] || '#757575'
-const getAccountColor = (accountId: string) => ACCOUNT_COLORS[accountId] || '#757575'
-
-const levelBadgeClass = (level: LogEntry['level']) => {
-  const base = 'rounded px-2 py-0.5 text-[10px] font-semibold'
-  if (level === 'INFO') return `${base} bg-blue-100 text-blue-700`
-  if (level === 'WARNING') return `${base} bg-amber-100 text-amber-700`
-  if (level === 'ERROR' || level === 'CRITICAL') return `${base} bg-rose-100 text-rose-700`
-  return `${base} bg-violet-100 text-violet-700`
-}
-
-const statusBadgeClass = (status: string) => {
-  const base = 'rounded-md px-2 py-0.5 text-[11px] font-semibold'
-  if (status === 'success') return `${base} bg-emerald-100 text-emerald-700`
-  if (status === 'error') return `${base} bg-rose-100 text-rose-700`
-  if (status === 'timeout') return `${base} bg-amber-100 text-amber-700`
-  return `${base} bg-amber-100 text-amber-700`
-}
-
-const statusLabel = (status: string) => {
-  if (status === 'success') return '成功'
-  if (status === 'error') return '失败'
-  if (status === 'timeout') return '超时'
-  return '进行中'
-}
-
-const parseLogMessage = (message: string) => {
-  let remaining = message
-  const tags: string[] = []
-  let accountId = ''
-  const tagRegex = /^\[([A-Za-z0-9_]+)\]/
-
-  while (true) {
-    const match = remaining.match(tagRegex)
-    if (!match) break
-    const tag = match[1]
-    remaining = remaining.slice(match[0].length).trim()
-
-    if (tag.startsWith('req_')) {
-      continue
-    }
-    if (tag.startsWith('account_')) {
-      accountId = tag
-      continue
-    }
-    tags.push(tag)
-  }
-
-  return { tags, accountId, text: remaining }
-}
-
-const parseLogEntry = (log: LogEntry): ParsedLogEntry => {
-  const parsed = parseLogMessage(log.message)
-  const reqMatch = log.message.match(/\[req_([a-z0-9]+)\]/i)
-  return {
-    ...log,
-    ...parsed,
-    reqId: reqMatch ? reqMatch[1] : '',
-  }
-}
-
-const parseLogTime = (value: string) => {
-  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
-    return new Date(value)
-  }
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
-    return new Date(value.replace(' ', 'T'))
-  }
-  if (/^\d{2}:\d{2}:\d{2}$/.test(value)) {
-    const now = new Date()
-    const [hours, minutes, seconds] = value.split(':').map(Number)
-    const parsed = new Date(now)
-    parsed.setHours(hours, minutes, seconds, 0)
-    return parsed
-  }
-  return null
-}
-
-const SUMMARY_KEYWORDS = [
-  '开始',
-  '启动',
-  '完成',
-  '成功',
-  '失败',
-  'error',
-  'warning',
-  '超时',
-  'timeout',
-  '切换账户',
-  'rate limit',
-  '403',
-  'access restricted',
-  'cancel',
-  'send code',
-  '验证码',
-  '创建刷新任务',
-  '创建注册任务',
-  'task started',
-  'task finished',
-]
-
-const messageHasSummaryKeyword = (message: string) => {
-  const lower = message.toLowerCase()
-  return SUMMARY_KEYWORDS.some(keyword => lower.includes(keyword))
-}
-
-const isSummaryEvent = (log: ParsedLogEntry) => {
-  if (log.level === 'ERROR' || log.level === 'CRITICAL' || log.level === 'WARNING') {
-    return true
-  }
-  if (log.reqId && messageHasSummaryKeyword(log.message)) {
-    return true
-  }
-  if (log.message.includes('[REFRESH]') || log.message.includes('[REGISTER]')) {
-    return messageHasSummaryKeyword(log.message)
-  }
-  return messageHasSummaryKeyword(log.message)
-}
-
-const compactGroupLogsForSummary = (group: GroupedLog) => {
-  const logs = group.logs
-  if (!logs.length) return []
-
-  const selected: ParsedLogEntry[] = []
-  selected.push(logs[0])
-  for (let i = 1; i < logs.length - 1; i += 1) {
-    const log = logs[i]
-    if (isSummaryEvent(log)) {
-      selected.push(log)
-    }
-  }
-  if (logs.length > 1) {
-    selected.push(logs[logs.length - 1])
-  }
-
-  const deduped: ParsedLogEntry[] = []
-  const seen = new Set<string>()
-  for (const log of selected) {
-    const key = `${log.time}|${log.level}|${log.message}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    deduped.push(log)
-  }
-
-  if (deduped.length <= 50) return deduped
-  return [deduped[0], ...deduped.slice(-49)]
-}
-
-const getGroupStatus = (groupLogs: LogEntry[]) => {
-  const lastLog = groupLogs[groupLogs.length - 1]
-  const lastMessage = lastLog.message
-
-  if (lastMessage.includes('响应完成') || lastMessage.includes('非流式响应完成')) {
-    return 'success'
-  }
-  if (lastLog.level === 'ERROR' || lastMessage.includes('失败')) {
-    return 'error'
-  }
-
-  const parsedTime = parseLogTime(lastLog.time)
-  if (parsedTime) {
-    const diffMinutes = (Date.now() - parsedTime.getTime()) / 1000 / 60
-    if (diffMinutes > 5) {
-      return 'timeout'
-    }
-  }
-
-  return 'in_progress'
-}
-
-const buildGroupedLogs = (items: ParsedLogEntry[]): GroupedLogState => {
-  const groups = new Map<string, ParsedLogEntry[]>()
-  const groupOrder: string[] = []
-  const ungrouped: ParsedLogEntry[] = []
-
-  items.forEach((log) => {
-    if (log.reqId) {
-      if (!groups.has(log.reqId)) {
-        groups.set(log.reqId, [])
-        groupOrder.push(log.reqId)
-      }
-      groups.get(log.reqId)?.push(log)
-    } else {
-      ungrouped.push(log)
-    }
-  })
-
-  const groupList = groupOrder.map((id) => {
-    const groupLogs = groups.get(id) || []
-    const firstLog = groupLogs[0]
-    const accountMatch = firstLog?.message.match(/\[(account_[^\]]+)\]/i)
-    const modelMatch = firstLog?.message.match(/收到请求: ([^ |]+)/) || firstLog?.message.match(/Received request: ([^ |]+)/)
-
-    return {
-      id,
-      logs: groupLogs,
-      status: getGroupStatus(groupLogs),
-      accountId: firstLog?.accountId || (accountMatch ? accountMatch[1] : ''),
-      model: modelMatch ? modelMatch[1] : '',
-    }
-  })
-
-  return { ungrouped, groups: groupList }
-}
-
-const TASK_LOG_PREFIXES = ['[REFRESH]', '[REGISTER]']
-
-const isTaskLog = (message: string) =>
-  TASK_LOG_PREFIXES.some(prefix => message.includes(prefix))
-
-const structuredView = computed(() => {
-  const sourceUngrouped = groupedLogs.value.ungrouped
-  const sourceGroups = groupedLogs.value.groups
-
-  const displayUngrouped = detailMode.value === 'summary'
-    ? sourceUngrouped.filter(isSummaryEvent)
-    : sourceUngrouped
-
-  const displayGroups = detailMode.value === 'summary'
-    ? sourceGroups
-      .map(group => ({
-        ...group,
-        logs: compactGroupLogsForSummary(group),
-      }))
-      .filter(group => group.logs.length > 0)
-    : sourceGroups
-
-  const limitedUngrouped = displayUngrouped.length > structuredRenderLimit
-    ? displayUngrouped.slice(-structuredRenderLimit)
-    : displayUngrouped
-  const limitedGroups = displayGroups.length > structuredRenderLimit
-    ? displayGroups.slice(-structuredRenderLimit)
-    : displayGroups
-
-  return {
-    ungrouped: limitedUngrouped,
-    groups: limitedGroups,
-    limited: displayUngrouped.length > limitedUngrouped.length || displayGroups.length > limitedGroups.length,
-    ungroupedTotal: displayUngrouped.length,
-    groupsTotal: displayGroups.length,
-    ungroupedShowing: limitedUngrouped.length,
-    groupsShowing: limitedGroups.length,
-  }
-})
-
-const rawLogView = computed(() => {
-  const source = detailMode.value === 'summary'
-    ? parsedLogs.value.filter(isSummaryEvent)
-    : parsedLogs.value
-  const total = source.length
-  const startIndex = total > rawRenderLimit ? total - rawRenderLimit : 0
-  const slice = source.slice(startIndex)
-  const text = slice.map(log => `${log.time} | ${log.level} | ${log.message}`).join('\n')
-  const showing = slice.length
-  return {
-    text,
-    total,
-    showing,
-    limited: total > showing,
-  }
-})
-
-const isCollapsed = (requestId: string) => collapsedState.value[requestId] === true
-
-const toggleGroup = (requestId: string) => {
-  collapsedState.value[requestId] = !isCollapsed(requestId)
-  localStorage.setItem('log-fold-state', JSON.stringify(collapsedState.value))
-}
-
-const isGroupLimited = (group: GroupedLog) => group.logs.length > groupLogLimit
-
-const visibleGroupLogs = (group: GroupedLog) => {
-  if (group.logs.length <= groupLogLimit) return group.logs
-  return group.logs.slice(-groupLogLimit)
-}
-
-const normalizeLimit = () => {
-  if (!filters.limit || Number.isNaN(filters.limit)) {
-    filters.limit = 300
-  }
-  filters.limit = Math.min(Math.max(filters.limit, 10), 1000)
-}
-
-const fetchLogs = async () => {
-  if (isFetching) return
-  isFetching = true
-  errorMessage.value = ''
-  statusMessage.value = ''
-  normalizeLimit()
-  try {
-    const response = await logsApi.list({
-      limit: filters.limit,
-      level: filters.level || undefined,
-      search: filters.search || undefined,
-    })
-    logs.value = response.logs
-    const filtered = hideTaskLogs.value
-      ? response.logs.filter(log => !isTaskLog(log.message))
-      : response.logs
-    parsedLogs.value = filtered.map(parseLogEntry)
-    groupedLogs.value = buildGroupedLogs(parsedLogs.value)
-    stats.value = response.stats
-  } catch (error: any) {
-    errorMessage.value = error.message || '日志加载失败'
-  } finally {
-    isFetching = false
-    requestAnimationFrame(scrollToBottom)
-  }
-}
-
-const exportLogs = async () => {
-  statusMessage.value = ''
-  statusTone.value = 'success'
-  try {
-    const response = await logsApi.list({
-      limit: 1000,
-      level: filters.level || undefined,
-      search: filters.search || undefined,
-    })
-    const blob = new Blob(
-      [JSON.stringify({ exported_at: new Date().toISOString(), logs: response.logs }, null, 2)],
-      { type: 'application/json' }
-    )
-    const blobUrl = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = blobUrl
-    anchor.download = `logs_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
-    anchor.click()
-    URL.revokeObjectURL(blobUrl)
-    statusMessage.value = '导出成功'
-  } catch (error: any) {
-    statusTone.value = 'error'
-    statusMessage.value = error.message || '导出失败'
-  }
-}
-
-const clearLogs = async () => {
-  confirmOpen.value = false
-  try {
-    await logsApi.clear()
-    statusTone.value = 'success'
-    statusMessage.value = '已清空日志'
-    await fetchLogs()
-  } catch (error: any) {
-    statusTone.value = 'error'
-    statusMessage.value = error.message || '清空失败'
-  }
-}
-
-const stopAutoRefresh = () => {
-  if (timer) {
-    window.clearTimeout(timer)
-    timer = undefined
-  }
-}
-
-const scheduleAutoRefresh = () => {
-  if (!autoRefreshEnabled.value || document.hidden) return
-  timer = window.setTimeout(async () => {
-    await fetchLogs()
-    scheduleAutoRefresh()
-  }, refreshIntervalMs)
-}
-
-const startAutoRefresh = () => {
-  stopAutoRefresh()
-  scheduleAutoRefresh()
-}
-
-const toggleAutoRefresh = () => {
-  autoRefreshEnabled.value = !autoRefreshEnabled.value
-  if (autoRefreshEnabled.value) {
-    startAutoRefresh()
-  } else {
-    stopAutoRefresh()
-  }
-}
-
-const toggleDetailMode = () => {
-  detailMode.value = detailMode.value === 'summary' ? 'detail' : 'summary'
-  localStorage.setItem('log-detail-mode', detailMode.value)
-  requestAnimationFrame(scrollToBottom)
-}
-
-const toggleView = () => {
-  rawView.value = !rawView.value
-  requestAnimationFrame(scrollToBottom)
-}
-
-const scrollToBottom = () => {
-  if (rawView.value && rawLogContainer.value) {
-    rawLogContainer.value.scrollTop = rawLogContainer.value.scrollHeight
-  }
-  if (!rawView.value && structuredLogContainer.value) {
-    structuredLogContainer.value.scrollTop = structuredLogContainer.value.scrollHeight
-  }
-}
-
-const handleVisibilityChange = () => {
-  if (document.hidden) {
-    stopAutoRefresh()
-  } else if (autoRefreshEnabled.value) {
-    startAutoRefresh()
-  }
-}
-
-onMounted(() => {
-  const saved = localStorage.getItem('log-fold-state')
-  if (saved) {
-    try {
-      collapsedState.value = JSON.parse(saved)
-    } catch {
-      collapsedState.value = {}
-    }
-  }
-  const savedDetailMode = localStorage.getItem('log-detail-mode')
-  if (savedDetailMode === 'summary' || savedDetailMode === 'detail') {
-    detailMode.value = savedDetailMode
-  }
-  fetchLogs()
-  startAutoRefresh()
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-})
-
-watch(hideTaskLogs, () => {
-  // Re-filter from raw logs when toggle changes
-  const filtered = hideTaskLogs.value
-    ? logs.value.filter(log => !isTaskLog(log.message))
-    : logs.value
-  parsedLogs.value = filtered.map(parseLogEntry)
-  groupedLogs.value = buildGroupedLogs(parsedLogs.value)
-  requestAnimationFrame(scrollToBottom)
-})
-
-onBeforeUnmount(() => {
-  stopAutoRefresh()
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-})
+const {
+  parsedLogs,
+  stats,
+  filters,
+  levelOptions,
+  isFetching,
+  fetchLogs,
+  exportLogs,
+  confirmOpen,
+  rawView,
+  toggleView,
+  detailMode,
+  toggleDetailMode,
+  autoRefreshEnabled,
+  toggleAutoRefresh,
+  rawLogContainer,
+  structuredLogContainer,
+  rawLogView,
+  structuredView,
+  shouldVirtualizeUngrouped,
+  levelBadgeClass,
+  buildAccountStyle,
+  buildLogTags,
+  isGroupLimited,
+  groupLogLimit,
+  groupMetaTexts,
+  groupHintText,
+  isCollapsed,
+  toggleGroup,
+  statusBadgeClass,
+  statusLabel,
+  getGroupLayerSections,
+  shouldVirtualizeLayer,
+  clearLogs,
+} = useLogsPage()
 </script>

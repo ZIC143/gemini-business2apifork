@@ -1,9 +1,9 @@
 <template>
   <div class="space-y-6">
-    <section class="rounded-3xl border border-border bg-card p-6">
+    <section class="ui-panel">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-base font-semibold text-foreground">帮助中心</p>
+          <p class="ui-section-title">帮助中心</p>
           <p class="mt-1 text-xs text-muted-foreground">
             快速上手与常见问题
           </p>
@@ -11,14 +11,14 @@
       </div>
 
       <!-- 标签切换 -->
-      <div class="mt-6 flex rounded-full border border-border bg-muted/30 p-1 text-xs">
+      <div class="ui-segmented mt-6 text-xs">
         <button
           v-for="tab in tabs"
           :key="tab.id"
-          class="flex-1 rounded-full px-4 py-2 font-medium transition-colors"
+          class="ui-segmented-btn flex-1 justify-center px-4 py-2"
           :class="activeTab === tab.id
-            ? 'bg-foreground text-background'
-            : 'text-muted-foreground hover:text-foreground'"
+            ? 'ui-segmented-btn-active'
+            : ''"
           @click="activeTab = tab.id"
         >
           {{ tab.label }}

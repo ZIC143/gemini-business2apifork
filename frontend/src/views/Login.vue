@@ -9,7 +9,7 @@
 
         <form @submit.prevent="handleLogin" class="mt-8 space-y-6">
           <div class="space-y-2">
-            <label for="password" class="block text-sm font-medium text-foreground">
+            <label for="password" class="ui-field-label text-sm font-medium text-foreground">
               管理员密钥
             </label>
             <input
@@ -17,9 +17,7 @@
               v-model="password"
               type="password"
               required
-              class="w-full rounded-2xl border border-input bg-background px-4 py-3 text-sm
-                     focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
-                     transition-all"
+              class="ui-input-md w-full"
               placeholder="请输入管理员密钥"
               :disabled="isLoading"
             />
@@ -32,8 +30,7 @@
           <button
             type="submit"
             :disabled="isLoading || !password"
-            class="w-full rounded-2xl bg-primary py-3 text-sm font-medium text-primary-foreground
-                   transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            class="ui-btn ui-btn-md ui-btn-primary w-full"
           >
             {{ isLoading ? '登录中...' : '登录' }}
           </button>

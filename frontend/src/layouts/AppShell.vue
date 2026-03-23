@@ -3,15 +3,15 @@
     <div class="flex min-h-screen flex-col lg:flex-row">
       <div
         v-if="isSidebarOpen"
-        class="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm lg:hidden"
+        class="fixed inset-0 z-30 bg-black/20 lg:hidden"
         @click="isSidebarOpen = false"
       ></div>
       <aside
-        class="fixed inset-y-0 left-0 z-40 w-72 -translate-x-full bg-card/90 backdrop-blur-sm lg:backdrop-blur-none border-r border-border
-               transition-[width,transform] duration-200 ease-out will-change-[transform] transform-gpu flex flex-col lg:static lg:translate-x-0 lg:bg-card/80
+        class="fixed inset-y-0 left-0 z-40 w-64 -translate-x-full bg-card border-r border-border
+               transition-transform duration-200 ease-out will-change-[transform] transform-gpu flex flex-col lg:static lg:translate-x-0 lg:bg-card
                lg:border-b-0 lg:border-r lg:sticky lg:top-0 lg:h-screen"
         :class="[
-          { 'translate-x-0': isSidebarOpen, 'w-20 lg:w-20': isSidebarCollapsed },
+          { 'translate-x-0': isSidebarOpen, 'w-16 lg:w-16': isSidebarCollapsed },
         ]"
       >
         <div
@@ -35,7 +35,9 @@
                 <path d="M12 2C6.477 2 2 6.477 2 12c0 4.419 2.865 8.166 6.839 9.489.5.09.682-.217.682-.483 0-.237-.009-.868-.014-1.703-2.782.604-3.369-1.341-3.369-1.341-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.004.071 1.532 1.031 1.532 1.031.892 1.529 2.341 1.087 2.91.832.091-.647.349-1.087.636-1.337-2.22-.253-4.555-1.11-4.555-4.944 0-1.092.39-1.987 1.029-2.687-.103-.253-.446-1.272.098-2.65 0 0 .84-.269 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.295 2.748-1.026 2.748-1.026.546 1.378.202 2.397.1 2.65.64.7 1.028 1.595 1.028 2.687 0 3.842-2.338 4.687-4.566 4.936.359.309.678.919.678 1.852 0 1.337-.012 2.418-.012 2.747 0 .268.18.577.688.479A10.002 10.002 0 0 0 22 12c0-5.523-4.477-10-10-10z" />
               </svg>
             </a>
-            <span v-if="!isSidebarCollapsed" class="text-base font-semibold text-foreground">Gemini Business2API</span>
+            <div v-if="!isSidebarCollapsed" class="min-w-0">
+              <p class="ui-section-title">Gemini Business2API</p>
+            </div>
           </div>
         </div>
 
@@ -59,7 +61,7 @@
               :title="isSidebarCollapsed ? item.label : undefined"
             >
               <span
-                class="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-2xl border border-border"
                 :class="navIconClass(item.path)"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor">
@@ -98,14 +100,12 @@
             <button
               v-if="!isSidebarCollapsed"
               @click="handleLogout"
-              class="flex-1 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium
-                     text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+              class="ui-btn ui-btn-sm ui-btn-outline w-full justify-center rounded-2xl text-muted-foreground"
             >
               退出登录
             </button>
             <button
-              class="h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border text-muted-foreground transition-all
-                     hover:border-primary hover:text-primary flex"
+              class="ui-btn ui-btn-icon-sm ui-btn-outline shrink-0 rounded-2xl text-muted-foreground"
               @click="isSidebarCollapsed = !isSidebarCollapsed"
               :title="isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
             >
@@ -123,11 +123,10 @@
       </aside>
 
       <main class="min-w-0 flex-1 overflow-hidden lg:ml-0">
-        <header class="min-w-0 flex flex-col gap-4 border-b border-border bg-card/70 px-6 py-5 backdrop-blur lg:flex-row lg:items-center lg:justify-between lg:px-10">
+        <header class="min-w-0 flex flex-col gap-4 border-b border-border bg-card px-6 py-5 lg:flex-row lg:items-center lg:justify-between lg:px-10">
           <div class="flex items-center gap-3">
             <button
-              class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-foreground transition-colors
-                     hover:border-primary hover:text-primary lg:hidden"
+              class="ui-btn ui-btn-icon-sm ui-btn-outline lg:hidden"
               @click="isSidebarOpen = true"
               aria-label="打开导航"
             >
@@ -163,22 +162,35 @@
                 <rect class="logo-eye" x="81" y="68" width="14" height="4" rx="1" />
               </g>
             </svg>
-            <h2 class="text-xl font-semibold text-foreground lg:text-2xl">
-              {{ currentPageTitle }}
-            </h2>
+            <div class="flex min-w-0 items-center gap-2">
+              <h2 class="truncate text-xl font-semibold text-foreground lg:text-2xl">
+                {{ currentPageTitle }}
+              </h2>
+              <span
+                v-if="sidebarVersionLabel"
+                class="ui-chip shrink-0 px-2.5 py-1 text-[11px] text-muted-foreground"
+              >
+                {{ sidebarVersionLabel }}
+              </span>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-3">
             <button
               @click="refreshPage"
-              class="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-sm ui-btn-outline"
               title="刷新"
             >
               刷新
             </button>
             <button
-              class="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-sm ui-btn-outline"
+              :disabled="isCheckingUpdate"
+              @click="checkForUpdates"
+            >
+              {{ isCheckingUpdate ? '检查中...' : '检查更新' }}
+            </button>
+            <button
+              class="ui-btn ui-btn-sm ui-btn-outline"
               @click="openApiInfo"
             >
               接口信息
@@ -186,24 +198,35 @@
             <RouterLink
               to="/public/uptime"
               target="_blank"
-              class="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-sm ui-btn-outline"
             >
               状态监控
             </RouterLink>
             <RouterLink
               to="/public/logs"
               target="_blank"
-              class="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-sm ui-btn-outline"
             >
               公开日志
             </RouterLink>
           </div>
         </header>
 
-        <div class="h-full overflow-y-auto overflow-x-hidden bg-card/70 px-4 pb-10 pt-6 backdrop-blur lg:px-10 lg:pt-10">
-          <RouterView />
+        <div class="h-full overflow-y-auto overflow-x-hidden bg-card px-4 pb-10 pt-6 lg:px-10 lg:pt-10">
+          <RouterView v-slot="{ Component, route: currentRoute }">
+            <KeepAlive :max="7">
+              <component
+                :is="Component"
+                v-if="currentRoute.meta.keepAlive"
+                :key="String(currentRoute.name || currentRoute.path)"
+              />
+            </KeepAlive>
+            <component
+              :is="Component"
+              v-if="!currentRoute.meta.keepAlive"
+              :key="String(currentRoute.name || currentRoute.path)"
+            />
+          </RouterView>
         </div>
       </main>
     </div>
@@ -220,9 +243,9 @@
       <div v-if="isApiInfoOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4">
         <div class="w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-xl">
           <div class="flex items-center justify-between">
-            <p class="text-sm font-medium text-foreground">API 接口</p>
+            <p class="ui-subsection-title">API 接口</p>
             <button
-              class="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center text-muted-foreground"
               @click="isApiInfoOpen = false"
             >
               关闭
@@ -238,8 +261,7 @@
                   {{ apiBaseUrl }}
                 </p>
                 <button
-                  class="shrink-0 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground transition-colors
-                         hover:border-primary hover:text-primary"
+                  class="ui-btn ui-btn-sm ui-btn-outline shrink-0 text-[11px] text-muted-foreground"
                   @click="copyText(apiBaseUrl)"
                 >
                   复制
@@ -253,8 +275,7 @@
                   {{ apiSdkUrl }}
                 </p>
                 <button
-                  class="shrink-0 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground transition-colors
-                         hover:border-primary hover:text-primary"
+                  class="ui-btn ui-btn-sm ui-btn-outline shrink-0 text-[11px] text-muted-foreground"
                   @click="copyText(apiSdkUrl)"
                 >
                   复制
@@ -268,8 +289,7 @@
                   {{ apiFullUrl }}
                 </p>
                 <button
-                  class="shrink-0 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground transition-colors
-                         hover:border-primary hover:text-primary"
+                  class="ui-btn ui-btn-sm ui-btn-outline shrink-0 text-[11px] text-muted-foreground"
                   @click="copyText(apiFullUrl)"
                 >
                   复制
@@ -283,7 +303,7 @@
                   <span
                     v-for="model in supportedModels"
                     :key="model"
-                    class="rounded-full border border-border px-2 py-0.5 text-[11px]"
+                    class="ui-chip text-[11px]"
                   >
                     {{ model }}
                   </span>
@@ -297,8 +317,7 @@
                   {{ apiKeyDisplay }}
                 </p>
                 <button
-                  class="shrink-0 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground transition-colors
-                         hover:border-primary hover:text-primary"
+                  class="ui-btn ui-btn-sm ui-btn-outline shrink-0 text-[11px] text-muted-foreground"
                   @click="copyText(apiKeyDisplay)"
                 >
                   复制
@@ -309,8 +328,7 @@
 
           <div class="mt-6 flex items-center justify-end">
             <button
-              class="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity
-                     hover:opacity-90"
+              class="ui-btn ui-btn-xs ui-btn-primary min-w-14 justify-center"
               @click="isApiInfoOpen = false"
             >
               知道了
@@ -323,21 +341,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { KeepAlive, computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRouter, useRoute } from 'vue-router'
+import { versionApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const toast = useToast()
 const isSidebarOpen = ref(false)
 const isSidebarCollapsed = ref(false)
 const confirmDialog = useConfirmDialog()
 const isApiInfoOpen = ref(false)
+const isCheckingUpdate = ref(false)
+const currentVersionTag = ref('')
 
 const menuItems = [
   {
@@ -414,6 +437,7 @@ const apiBaseUrl = computed(() => {
 const apiSdkUrl = computed(() => `${apiBaseUrl.value}/v1`)
 const apiFullUrl = computed(() => `${apiBaseUrl.value}/v1/chat/completions`)
 const apiKeyDisplay = computed(() => settingsStore.settings?.basic?.api_key || '未设置')
+const sidebarVersionLabel = computed(() => String(currentVersionTag.value || 'v0.0.0').trim())
 const supportedModels = [
   'gemini-auto',
   'gemini-2.5-flash',
@@ -424,6 +448,8 @@ const supportedModels = [
   'gemini-imagen',
   'gemini-veo',
 ]
+
+let hasScheduledRoutePrefetch = false
 
 watch(
   () => route.path,
@@ -448,7 +474,7 @@ async function handleLogout() {
   })
   if (!confirmed) return
   await authStore.logout()
-  router.push({ name: 'login' })
+  await router.replace({ name: 'login' })
 }
 
 function refreshPage() {
@@ -470,5 +496,91 @@ async function copyText(value: string) {
     console.error('Copy failed', error)
   }
 }
+
+async function checkForUpdates() {
+  if (isCheckingUpdate.value) return
+  isCheckingUpdate.value = true
+  try {
+    const result = await versionApi.check()
+    if (result.check_error) {
+      toast.warning(`版本检查失败：${result.check_error}`)
+      return
+    }
+
+    if (result.update_available) {
+      const shouldOpen = await confirmDialog.ask({
+        title: '发现新版本',
+        message: `当前 ${result.tag}，最新 ${result.latest_tag || result.latest_version}。是否打开发布页？`,
+        confirmText: '打开',
+        cancelText: '关闭',
+      })
+      if (shouldOpen && result.release_url) {
+        window.open(result.release_url, '_blank', 'noopener,noreferrer')
+      }
+      return
+    }
+
+    if (result.is_latest) {
+      toast.success(`当前已是最新版本：${result.tag}`)
+      return
+    }
+
+    toast.info(`当前版本 ${result.tag}${result.latest_tag ? `，最新 ${result.latest_tag}` : ''}`)
+  } catch (error: any) {
+    toast.error(error.message || '检查更新失败')
+  } finally {
+    isCheckingUpdate.value = false
+  }
+}
+
+async function loadCurrentVersion() {
+  try {
+    const result = await versionApi.current()
+    const tag = String(result.tag || '').trim()
+    currentVersionTag.value = tag || 'v0.0.0'
+  } catch {
+    currentVersionTag.value = 'v0.0.0'
+  }
+}
+
+function scheduleRoutePrefetch() {
+  if (hasScheduledRoutePrefetch) return
+  hasScheduledRoutePrefetch = true
+
+  const preload = () => {
+    const tasks = [
+      () => import('@/views/Dashboard.vue'),
+      () => import('@/views/Accounts.vue'),
+      () => import('@/views/Settings.vue'),
+      () => import('@/views/Logs.vue'),
+      () => import('@/views/Gallery.vue'),
+      () => import('@/views/Docs.vue'),
+    ]
+
+    tasks.reduce((chain, task, index) => {
+      return chain.then(() => new Promise<void>((resolve) => {
+        window.setTimeout(() => {
+          task().catch(() => undefined).finally(() => resolve())
+        }, index * 80)
+      }))
+    }, Promise.resolve())
+  }
+
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    ;(
+      window as Window & {
+        requestIdleCallback: (cb: () => void, options?: { timeout: number }) => number
+      }
+    ).requestIdleCallback(preload, { timeout: 1200 })
+    return
+  }
+
+  window.setTimeout(preload, 240)
+}
+
+onMounted(() => {
+  void loadCurrentVersion()
+  scheduleRoutePrefetch()
+})
 
 </script>

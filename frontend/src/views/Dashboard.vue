@@ -1,150 +1,66 @@
-﻿<template>
+<template>
   <div class="space-y-5">
     <section class="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <div
+      <StatCard
         v-for="stat in stats"
         :key="stat.label"
-        class="rounded-3xl border border-border bg-card p-4"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div class="flex-1 min-w-0">
-            <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">{{ stat.label }}</p>
-            <p class="mt-2 text-2xl font-semibold text-foreground tabular-nums">{{ stat.value }}</p>
-            <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">{{ stat.caption }}</p>
-          </div>
-          <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" :class="stat.iconBg">
-            <Icon :icon="stat.icon" class="h-4 w-4" :class="stat.iconColor" />
-          </div>
-        </div>
-      </div>
+        :label="stat.label"
+        :value="stat.value"
+        :caption="stat.caption"
+        :icon="stat.icon"
+        :icon-bg="stat.iconBg"
+        :icon-color="stat.iconColor"
+      />
     </section>
 
     <section class="grid grid-cols-1 gap-4">
-      <div class="rounded-3xl border border-border bg-card p-5">
-        <div class="flex items-center justify-between mb-4">
-          <p class="text-sm font-medium text-foreground">模型请求分布</p>
-          <div class="flex items-center gap-1">
-            <button
-              v-for="range in timeRanges"
-              :key="range.value"
-              @click="timeRangeHourlyRequests = range.value"
-              :class="timeRangeHourlyRequests === range.value
-                ? 'bg-accent text-foreground border-primary/50 font-semibold'
-                : 'bg-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground border-border'"
-              class="rounded-lg px-3 py-1.5 text-xs font-medium transition-all border"
-            >
-              {{ range.label }}
-            </button>
-          </div>
-        </div>
+      <ChartCard title="模型请求分布">
+        <template #actions>
+          <SegmentedTabs v-model="timeRangeHourlyRequests" :options="timeRanges" aria-label="模型请求分布时间范围" />
+        </template>
         <div ref="hourlyRequestsChartRef" class="h-72 w-full px-2"></div>
-      </div>
+      </ChartCard>
     </section>
 
     <section class="grid grid-cols-1 gap-4">
-      <div class="rounded-3xl border border-border bg-card p-5">
-        <div class="flex items-center justify-between mb-4">
-          <p class="text-sm font-medium text-foreground">调用趋势</p>
-          <div class="flex items-center gap-1">
-            <button
-              v-for="range in timeRanges"
-              :key="range.value"
-              @click="timeRangeTrend = range.value"
-              :class="timeRangeTrend === range.value
-                ? 'bg-accent text-foreground border-primary/50 font-semibold'
-                : 'bg-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground border-border'"
-              class="rounded-lg px-3 py-1.5 text-xs font-medium transition-all border"
-            >
-              {{ range.label }}
-            </button>
-          </div>
-        </div>
+      <ChartCard title="调用趋势">
+        <template #actions>
+          <SegmentedTabs v-model="timeRangeTrend" :options="timeRanges" aria-label="调用趋势时间范围" />
+        </template>
         <div ref="trendChartRef" class="h-56 w-full"></div>
-      </div>
+      </ChartCard>
     </section>
 
     <section class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div class="rounded-3xl border border-border bg-card p-5">
-        <div class="flex items-center justify-between mb-4">
-          <p class="text-sm font-medium text-foreground">成功率趋势</p>
-          <div class="flex items-center gap-1">
-            <button
-              v-for="range in timeRanges"
-              :key="range.value"
-              @click="timeRangeSuccessRate = range.value"
-              :class="timeRangeSuccessRate === range.value
-                ? 'bg-accent text-foreground border-primary/50 font-semibold'
-                : 'bg-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground border-border'"
-              class="rounded-lg px-3 py-1.5 text-xs font-medium transition-all border"
-            >
-              {{ range.label }}
-            </button>
-          </div>
-        </div>
+      <ChartCard title="成功率趋势">
+        <template #actions>
+          <SegmentedTabs v-model="timeRangeSuccessRate" :options="timeRanges" aria-label="成功率趋势时间范围" />
+        </template>
         <div ref="successRateChartRef" class="h-56 w-full"></div>
-      </div>
+      </ChartCard>
 
-      <div class="rounded-3xl border border-border bg-card p-5">
-        <div class="flex items-center justify-between mb-4">
-          <p class="text-sm font-medium text-foreground">平均响应时间</p>
-          <div class="flex items-center gap-1">
-            <button
-              v-for="range in timeRanges"
-              :key="range.value"
-              @click="timeRangeResponseTime = range.value"
-              :class="timeRangeResponseTime === range.value
-                ? 'bg-accent text-foreground border-primary/50 font-semibold'
-                : 'bg-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground border-border'"
-              class="rounded-lg px-3 py-1.5 text-xs font-medium transition-all border"
-            >
-              {{ range.label }}
-            </button>
-          </div>
-        </div>
+      <ChartCard title="平均响应时间">
+        <template #actions>
+          <SegmentedTabs v-model="timeRangeResponseTime" :options="timeRanges" aria-label="平均响应时间范围" />
+        </template>
         <div ref="responseTimeChartRef" class="h-56 w-full"></div>
-      </div>
+      </ChartCard>
     </section>
 
     <section class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div class="rounded-3xl border border-border bg-card p-5">
-        <div class="flex items-center justify-between mb-4">
-          <p class="text-sm font-medium text-foreground">模型调用占比</p>
-          <div class="flex items-center gap-1">
-            <button
-              v-for="range in timeRanges"
-              :key="range.value"
-              @click="timeRangeModel = range.value"
-              :class="timeRangeModel === range.value
-                ? 'bg-accent text-foreground border-primary/50 font-semibold'
-                : 'bg-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground border-border'"
-              class="rounded-lg px-3 py-1.5 text-xs font-medium transition-all border"
-            >
-              {{ range.label }}
-            </button>
-          </div>
-        </div>
+      <ChartCard title="模型调用占比">
+        <template #actions>
+          <SegmentedTabs v-model="timeRangeModel" :options="timeRanges" aria-label="模型调用占比时间范围" />
+        </template>
         <div ref="modelChartRef" class="h-56 w-full"></div>
-      </div>
+      </ChartCard>
 
-      <div class="rounded-3xl border border-border bg-card p-5">
-        <div class="flex items-center justify-between mb-4">
-          <p class="text-sm font-medium text-foreground">模型使用排行</p>
-          <div class="flex items-center gap-1">
-            <button
-              v-for="range in timeRanges"
-              :key="range.value"
-              @click="timeRangeModelRank = range.value"
-              :class="timeRangeModelRank === range.value
-                ? 'bg-accent text-foreground border-primary/50 font-semibold'
-                : 'bg-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground border-border'"
-              class="rounded-lg px-3 py-1.5 text-xs font-medium transition-all border"
-            >
-              {{ range.label }}
-            </button>
-          </div>
-        </div>
+      <ChartCard title="模型使用排行">
+        <template #actions>
+          <SegmentedTabs v-model="timeRangeModelRank" :options="timeRanges" aria-label="模型使用排行时间范围" />
+        </template>
         <div ref="modelRankChartRef" class="h-56 w-full"></div>
-      </div>
+      </ChartCard>
     </section>
 
     <!-- 节点统计图表 -->
@@ -163,7 +79,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Icon } from '@iconify/vue'
+import ChartCard from '@/components/ai/ChartCard.vue'
+import StatCard from '@/components/ai/StatCard.vue'
+import SegmentedTabs from '@/components/ui/SegmentedTabs.vue'
 import { statsApi } from '@/api'
 import {
   getLineChartTheme,
@@ -202,29 +120,6 @@ function createChartWatcher(chartType: string, updateFn: () => void) {
     await loadChartData(chartType, newVal)
     updateFn()
   }
-}
-
-// 监听各图表时间范围变化 - 只更新对应图表
-watch(timeRangeHourlyRequests, createChartWatcher('hourlyRequests', updateHourlyRequestsChart))
-watch(timeRangeTrend, createChartWatcher('trend', updateTrendChart))
-watch(timeRangeSuccessRate, createChartWatcher('successRate', updateSuccessRateChart))
-watch(timeRangeModel, createChartWatcher('model', updateModelChart))
-watch(timeRangeModelRank, createChartWatcher('modelRank', updateModelRankChart))
-watch(timeRangeResponseTime, createChartWatcher('responseTime', updateResponseTimeChart))
-
-const stats = ref([
-  {
-    label: '账号总数',
-    value: '0',
-    caption: '账号池中的总数量',
-    icon: 'lucide:database',
-    iconBg: 'bg-sky-100',
-    iconColor: 'text-sky-600'
-  },
-  {
-    label: '活跃账号',
-    value: '0',
-    caption: '正常运行中，可随时调用',
     icon: 'lucide:check-circle',
     iconBg: 'bg-emerald-100',
     iconColor: 'text-emerald-600'
@@ -970,4 +865,27 @@ function updateNodeStatsCharts() {
   })
 }
 
+=======
+import ChartCard from '@/components/ai/ChartCard.vue'
+import StatCard from '@/components/ai/StatCard.vue'
+import SegmentedTabs from '@/components/ui/SegmentedTabs.vue'
+import { useDashboardPage } from './dashboard/useDashboardPage'
+
+const {
+  stats,
+  timeRanges,
+  timeRangeHourlyRequests,
+  timeRangeTrend,
+  timeRangeSuccessRate,
+  timeRangeModel,
+  timeRangeModelRank,
+  timeRangeResponseTime,
+  hourlyRequestsChartRef,
+  trendChartRef,
+  successRateChartRef,
+  responseTimeChartRef,
+  modelChartRef,
+  modelRankChartRef,
+} = useDashboardPage()
+>>>>>>> 4c8c2f1 (feat: 前端重构对齐、版本检测与许可证切换)
 </script>

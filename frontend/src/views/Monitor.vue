@@ -1,9 +1,9 @@
 <template>
   <div class="space-y-6">
-    <section class="rounded-3xl border border-border bg-card p-6">
+    <section class="ui-panel">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-base font-semibold text-foreground">服务状态</p>
+          <p class="ui-section-title">服务状态</p>
           <p class="mt-1 text-xs text-muted-foreground">
             最近更新：{{ updatedAt || '未获取' }}
           </p>
@@ -12,8 +12,7 @@
           <a
             href="/#/public/uptime"
             target="_blank"
-            class="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors
-                   hover:border-primary hover:text-primary"
+            class="ui-btn ui-btn-sm ui-btn-outline"
           >
             打开监控页
           </a>

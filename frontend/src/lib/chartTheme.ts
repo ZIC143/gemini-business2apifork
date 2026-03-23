@@ -21,6 +21,13 @@ export const chartColors = {
 
 // 模型专用色板
 export const modelColors: Record<string, string> = {
+  'gemini-3.1-fast': chartColors.warning,
+  'gemini-3.1-thinking': chartColors.cyan,
+  'gemini-3.1-pro': chartColors.primary,
+  'nano-banana-2': chartColors.emerald,
+  'gemini-3.1-fast-imagen': chartColors.warning,
+  'gemini-3.1-thinking-imagen': chartColors.cyan,
+  'gemini-3.1-pro-imagen': chartColors.primary,
   'gemini-3-pro-preview': chartColors.primary,
   'gemini-3.1-pro-preview': chartColors.primary,
   'gemini-2.5-pro': chartColors.cyan,
@@ -33,6 +40,13 @@ export const modelColors: Record<string, string> = {
 
 // 有效模型列表
 export const validModels = [
+  'gemini-3.1-fast',
+  'gemini-3.1-thinking',
+  'gemini-3.1-pro',
+  'nano-banana-2',
+  'gemini-3.1-fast-imagen',
+  'gemini-3.1-thinking-imagen',
+  'gemini-3.1-pro-imagen',
   'gemini-auto',
   'gemini-2.5-flash',
   'gemini-2.5-pro',
@@ -104,6 +118,12 @@ const legendConfig = {
  */
 export function getLineChartTheme() {
   return {
+    animation: true,
+    animationThreshold: 4000,
+    animationDuration: 700,
+    animationEasing: 'cubicOut',
+    animationDurationUpdate: 420,
+    animationEasingUpdate: 'cubicOut',
     tooltip: {
       ...tooltipConfig,
       trigger: 'axis',

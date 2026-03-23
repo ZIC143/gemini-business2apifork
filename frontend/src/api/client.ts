@@ -1,36 +1,28 @@
-import axios, { type AxiosInstance, type AxiosError } from 'axios'
+﻿import axios, { type AxiosInstance, type AxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 
-// 创建 axios 实例
 export const apiClient: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
   timeout: 30000,
-  withCredentials: true, // 支持 cookie 认证
+  withCredentials: true,
 })
 
-// 请求拦截器
 apiClient.interceptors.request.use(
-  (config) => {
-    // 可以在这里添加 token 等认证信息
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (config) => config,
+  (error) => Promise.reject(error)
 )
 
-// 防止多个 401 响应触发重复跳转
 let isRedirecting = false
 
-// 响应拦截器
 apiClient.interceptors.response.use(
-  (response) => {
-    return response.data
-  },
+  (response) => response.data,
   async (error: AxiosError) => {
-    // 统一错误处理
-    if (error.response?.status === 401 && !isRedirecting) {
+    const rawHeaders = (error.config?.headers || {}) as Record<string, unknown>
+    const skipAuthRedirectHeader = rawHeaders['X-Skip-Auth-Redirect'] ?? rawHeaders['x-skip-auth-redirect']
+    const skipAuthRedirect = String(skipAuthRedirectHeader ?? '') === '1'
+
+    if (error.response?.status === 401 && !isRedirecting && !skipAuthRedirect) {
       isRedirecting = true
       const authStore = useAuthStore()
       authStore.isLoggedIn = false
@@ -42,7 +34,6 @@ apiClient.interceptors.response.use(
       ? (error.response.data as any).detail || (error.response.data as any).message
       : error.message
 
-    // 保留 HTTP 状态码，便于调用方做精细化处理（例如任务不存在时的 404）
     const wrapped = new Error(errorMessage || '请求失败') as Error & {
       status?: number
       data?: unknown

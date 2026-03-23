@@ -2,20 +2,19 @@
   <img src="docs/logo.svg" width="120" alt="Gemini Business2API logo" />
 </p>
 <h1 align="center">Gemini Business2API</h1>
-<p align="center">赋予硅基生物以灵魂</p>
-<p align="center">当时明月在 · 曾照彩云归</p>
+<p align="center">Gemini Business → OpenAI 兼容 API</p>
 <p align="center">
   <strong>简体中文</strong> | <a href="docs/README_EN.md">English</a>
 </p>
-<p align="center"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" /> <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" /> <img src="https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white" /> <img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white" /> <img src="https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white" /> <img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white" /></p>
+<p align="center"><img src="https://img.shields.io/badge/License-CNC--1.0-red.svg" /> <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" /> <img src="https://img.shields.io/badge/FastAPI-0.110-009688?logo=fastapi&logoColor=white" /> <img src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js&logoColor=white" /> <img src="https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white" /> <img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white" /></p>
 
-<p align="center">将 Gemini Business 转换为 OpenAI 兼容接口，支持多账号负载均衡、图像生成、视频生成、多模态能力与内置管理面板。</p>
+<p align="center">支持多账号轮询、注册机、多模态、图像生成与内置管理面板。</p>
 
 ---
 
 ## 📜 开源协议与声明
 
-**开源协议**: MIT License - 查看 [LICENSE](LICENSE) 文件了解详情
+**开源协议**: Cooperative Non-Commercial License (CNC-1.0) - 查看 [LICENSE](LICENSE) 文件了解详情
 
 ### ⚠️ 严禁滥用：禁止将本工具用于商业用途或任何形式的滥用（无论规模大小）
 
@@ -31,6 +30,16 @@
 **合法用途**：本项目仅限个人学习、技术研究与非商业性技术交流。
 
 📖 **完整声明与免责条款**：[DISCLAIMER.md](docs/DISCLAIMER.md)
+
+---
+
+## 💬 社区交流
+
+点击链接加入群聊【business2api交流群】：[https://qm.qq.com/q/yegwCqJisS](https://qm.qq.com/q/yegwCqJisS)
+
+## 🗺️ 路线图预告
+
+- 预告：`gemini-web` 逆向方向的技术研究分享、、
 
 ---
 
@@ -177,10 +186,10 @@ REMOTE_PROJECT_PASSWORD=your_admin_key
 
 **如需在线 PostgreSQL（可选）：**
 
-| 服务 | 免费额度 | 获取方式 |
-|------|---------|---------|
+| 服务                      | 免费额度                 | 获取方式                                       |
+| ------------------------- | ------------------------ | ---------------------------------------------- |
 | [Neon](https://neon.tech) | 512MB 存储 / 100 CPUH 月 | 注册 → Create Project → 复制 Connection string |
-| [Aiven](https://aiven.io) | 额度更充裕 | 注册 → 创建 PostgreSQL 服务 → 复制连接串 |
+| [Aiven](https://aiven.io) | 额度更充裕               | 注册 → 创建 PostgreSQL 服务 → 复制连接串       |
 
 > `postgres://` 和 `postgresql://` 两种格式均可直接使用，无需手动转换。
 
@@ -218,13 +227,13 @@ python scripts/migrate_to_database.py
 
 完全兼容 OpenAI API 格式，可直接对接 ChatGPT-Next-Web、LobeChat、OpenCat 等客户端。
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/v1/chat/completions` | POST | 对话补全（支持流式） |
-| `/v1/models` | GET | 获取可用模型列表 |
-| `/v1/images/generations` | POST | 图片生成（文生图） |
-| `/v1/images/edits` | POST | 图片编辑（图生图） |
-| `/health` | GET | 健康检查 |
+| 接口                     | 方法 | 说明                 |
+| ------------------------ | ---- | -------------------- |
+| `/v1/chat/completions`   | POST | 对话补全（支持流式） |
+| `/v1/models`             | GET  | 获取可用模型列表     |
+| `/v1/images/generations` | POST | 图片生成（文生图）   |
+| `/v1/images/edits`       | POST | 图片编辑（图生图）   |
+| `/health`                | GET  | 健康检查             |
 
 **调用示例：**
 
@@ -309,13 +318,13 @@ curl http://localhost:7860/v1/chat/completions \
 
 除本地 Docker Compose 外，以下平台均支持 Docker 镜像部署：
 
-| 平台 | 免费额度 | 特点 |
-|------|---------|------|
-| [Render](https://render.com) | ✅ 有 | 支持 Docker、自动 SSL、免费 PostgreSQL |
-| [Railway](https://railway.app) | $5/月额度 | 一键 Docker 部署、自带数据库 |
-| [Fly.io](https://fly.io) | ✅ 有 | 全球边缘部署、支持持久化卷 |
-| [Claw Cloud](https://claw.cloud) | ✅ 有 | 容器云平台，简单易用 |
-| 自建 VPS（推荐） | — | 完全可控，配合 Docker Compose |
+| 平台                             | 免费额度  | 特点                                   |
+| -------------------------------- | --------- | -------------------------------------- |
+| [Render](https://render.com)     | ✅ 有      | 支持 Docker、自动 SSL、免费 PostgreSQL |
+| [Railway](https://railway.app)   | $5/月额度 | 一键 Docker 部署、自带数据库           |
+| [Fly.io](https://fly.io)         | ✅ 有      | 全球边缘部署、支持持久化卷             |
+| [Claw Cloud](https://claw.cloud) | ✅ 有      | 容器云平台，简单易用                   |
+| 自建 VPS（推荐）                 | —         | 完全可控，配合 Docker Compose          |
 
 > Docker 镜像：`cooooookk/gemini-business2api:latest`
 >
@@ -327,18 +336,18 @@ curl http://localhost:7860/v1/chat/completions \
 2. 登录 [Zeabur](https://zeabur.com) → **创建项目** → **共享集群** → **部署新服务** → **连接 GitHub** → 选择 Fork 的仓库
 3. 添加环境变量：
 
-   | 变量名 | 必填 | 说明 |
-   |--------|------|------|
-   | `ADMIN_KEY` | ✅ | 管理面板登录密钥 |
+   | 变量名         | 必填 | 说明                                          |
+   | -------------- | ---- | --------------------------------------------- |
+   | `ADMIN_KEY`    | ✅    | 管理面板登录密钥                              |
    | `DATABASE_URL` | 可选 | PostgreSQL 连接串（仅在需要在线数据库时配置） |
 
 4. **持久化挂载目录**（重要）：
 
    在服务设置中添加持久化存储：
 
-   | 硬盘 ID | 挂载目录 |
-   |---------|---------|
-   | `data` | `/app/data` |
+   | 硬盘 ID | 挂载目录    |
+   | ------- | ----------- |
+   | `data`  | `/app/data` |
 
 5. 点击 **重新部署** 使配置生效
 

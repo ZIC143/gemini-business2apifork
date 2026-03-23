@@ -21,6 +21,7 @@
     >
       <div
         v-if="visible"
+        ref="tooltipRef"
         class="fixed z-[9999] w-64 rounded-lg border border-border bg-card p-3 shadow-lg"
         :style="tooltipStyle"
         @mouseenter="handleTooltipEnter"
@@ -28,10 +29,12 @@
       >
         <!-- 箭头 -->
         <span
-          class="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[6px] border-x-transparent border-t-border"
+          class="absolute top-full h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[6px] border-x-transparent border-t-border"
+          :style="arrowStyle"
         ></span>
         <span
-          class="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 -translate-y-px border-x-[5px] border-t-[5px] border-x-transparent border-t-card"
+          class="absolute top-full h-0 w-0 -translate-x-1/2 -translate-y-px border-x-[5px] border-t-[5px] border-x-transparent border-t-card"
+          :style="arrowStyle"
         ></span>
 
         <div class="mb-2 text-xs font-medium text-foreground">配额详情</div>
@@ -57,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, nextTick, ref } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { AccountQuotaStatus, QuotaStatus } from '@/types/api'
 
 const props = defineProps<{
@@ -65,8 +68,10 @@ const props = defineProps<{
 }>()
 
 const triggerRef = ref<HTMLElement | null>(null)
+const tooltipRef = ref<HTMLElement | null>(null)
 const visible = ref(false)
 const tooltipStyle = ref<Record<string, string>>({})
+const arrowStyle = ref<Record<string, string>>({ left: '50%' })
 let hideTimeout: ReturnType<typeof setTimeout> | null = null
 
 // SVG Icon Components
@@ -96,13 +101,26 @@ const VideoIcon = () => h('svg', { viewBox: '0 0 20 20', fill: 'currentColor' },
 
 const updatePosition = () => {
   if (!triggerRef.value) return
+
   const rect = triggerRef.value.getBoundingClientRect()
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0
+  const viewportPadding = 8
   const offset = 8
+  const fallbackWidth = Math.min(320, Math.max(220, viewportWidth - viewportPadding * 2))
+  const cardWidth = tooltipRef.value?.offsetWidth || fallbackWidth
+  const triggerCenter = rect.left + rect.width / 2
+  const minCenter = viewportPadding + cardWidth / 2
+  const maxCenter = Math.max(minCenter, viewportWidth - viewportPadding - cardWidth / 2)
+  const clampedCenter = Math.min(maxCenter, Math.max(minCenter, triggerCenter))
+  const arrowX = Math.min(Math.max(triggerCenter - (clampedCenter - cardWidth / 2), 12), Math.max(12, cardWidth - 12))
+
   tooltipStyle.value = {
-    left: `${rect.left + rect.width / 2}px`,
+    left: `${clampedCenter}px`,
     top: `${rect.top - offset}px`,
     transform: 'translate(-50%, -100%)',
+    maxWidth: `calc(100vw - ${viewportPadding * 2}px)`,
   }
+  arrowStyle.value = { left: `${arrowX}px` }
 }
 
 const showTooltip = () => {
@@ -113,6 +131,7 @@ const showTooltip = () => {
   visible.value = true
   nextTick(() => {
     updatePosition()
+    requestAnimationFrame(updatePosition)
   })
 }
 
@@ -140,6 +159,25 @@ const toggleTooltip = () => {
     showTooltip()
   }
 }
+
+const handleViewportChange = () => {
+  if (!visible.value) return
+  updatePosition()
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleViewportChange)
+  window.addEventListener('scroll', handleViewportChange, true)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleViewportChange)
+  window.removeEventListener('scroll', handleViewportChange, true)
+  if (hideTimeout) {
+    clearTimeout(hideTimeout)
+    hideTimeout = null
+  }
+})
 
 const badgeClass = computed(() => {
   const { limited_count, total_count } = props.quotaStatus

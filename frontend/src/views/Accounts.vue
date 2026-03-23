@@ -26,36 +26,31 @@
       </div>
     </Teleport>
 
-    <section class="rounded-3xl border border-border bg-card p-6">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <div class="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:items-center">
+    <section class="ui-panel space-y-5">
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div class="grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap xl:items-center">
           <input
-            v-model="searchQuery"
+            v-model.trim="searchQuery"
             type="text"
             placeholder="搜索账号 ID"
-            class="w-full rounded-full border border-input bg-background px-4 py-2 text-sm sm:w-48"
+            class="ui-input-sm min-w-[11rem] w-full xl:w-80"
           />
-          <SelectMenu
-            v-model="statusFilter"
-            :options="statusOptions"
-            class="!w-full sm:!w-40"
-          />
-          <SelectMenu
-            v-model="sortBy"
-            :options="sortOptions"
-            class="!w-full sm:!w-44"
-          />
+          <div class="w-full sm:w-[140px] xl:w-[140px] shrink-0">
+            <SelectMenu v-model="statusFilter" :options="statusOptions" />
+          </div>
+          <div class="w-full sm:w-[172px] xl:w-[172px] shrink-0">
+            <SelectMenu v-model="sortBy" :options="sortOptions" />
+          </div>
         </div>
-        <div class="flex w-full flex-wrap items-center gap-3 text-xs text-muted-foreground sm:w-auto sm:flex-nowrap">
+        <div class="flex w-full flex-wrap items-center gap-3 text-xs text-muted-foreground xl:w-auto xl:flex-nowrap">
           <Checkbox :modelValue="allSelected" @update:modelValue="toggleSelectAll">
             全选
           </Checkbox>
           <span>已选 {{ selectedCount }} / {{ filteredAccounts.length }} 个账号</span>
-          <div class="ml-auto flex items-center gap-2 sm:ml-0">
+          <div class="ml-auto flex items-center gap-2 xl:ml-0">
             <button
               type="button"
-              class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
               :class="viewMode === 'table' ? 'bg-accent text-accent-foreground' : ''"
               @click="viewMode = 'table'"
               aria-label="列表视图"
@@ -66,8 +61,7 @@
             </button>
             <button
               type="button"
-              class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
               :class="viewMode === 'card' ? 'bg-accent text-accent-foreground' : ''"
               @click="viewMode = 'card'"
               aria-label="卡片视图"
@@ -80,159 +74,203 @@
         </div>
       </div>
 
-      <div class="mt-4 flex flex-wrap items-center gap-2">
-        <button
-          class="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors
-                 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="isLoading"
-          @click="refreshAccounts"
-        >
-          刷新列表
-        </button>
-        <button
-          class="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors
-                 hover:border-primary hover:text-primary"
-          @click="openConfigPanel"
-        >
-          账户配置
-        </button>
-        <button
-          class="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors
-                 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="isRegistering || isRefreshing"
-          @click="openRegisterModal"
-        >
-          添加账户
-        </button>
-
-        <button
-          class="relative rounded-full border border-border px-4 py-2 text-sm font-medium transition-colors
-                 hover:border-primary hover:text-primary"
-          @click="openTaskModal"
-        >
-          <span class="flex items-center gap-2">
-            任务管理
-            <template v-if="isTaskRunning">
-              <span class="flex items-center gap-1.5 text-xs text-sky-500">
-                <span class="relative flex h-2 w-2">
-                  <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-500 opacity-75"></span>
-                  <span class="relative inline-flex h-2 w-2 rounded-full bg-sky-500"></span>
-                </span>
-                {{ taskProgressText }}
-              </span>
-            </template>
-          </span>
-        </button>
-
-        <div ref="moreActionsRef" class="relative">
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div class="flex flex-wrap items-center gap-2.5">
           <button
-            class="flex items-center gap-2 rounded-full border border-input bg-background px-4 py-2 text-sm font-medium
-                   text-foreground transition-colors hover:border-primary"
-            :class="showMoreActions ? 'bg-accent text-accent-foreground' : ''"
-            @click="toggleMoreActions"
+            class="ui-btn ui-btn-sm ui-btn-outline shrink-0 whitespace-nowrap"
+            :disabled="isLoading"
+            @click="refreshAccounts"
           >
-            更多操作
-            <svg aria-hidden="true" viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor">
-              <path d="M5 7l5 6 5-6H5z" />
-            </svg>
+            刷新列表
           </button>
-          <div
-            v-if="showMoreActions"
-            class="absolute right-0 z-10 mt-2 w-full space-y-1 rounded-2xl border border-border bg-card p-2 shadow-lg"
+          <button
+            class="ui-btn ui-btn-sm ui-btn-primary shrink-0 whitespace-nowrap"
+            :disabled="isRegistering || isRefreshing"
+            @click="openRegisterModal"
           >
+            添加账户
+          </button>
+          <button
+            class="ui-btn ui-btn-sm ui-btn-outline shrink-0 whitespace-nowrap"
+            @click="openConfigPanel"
+          >
+            账户配置
+          </button>
+          <button
+            class="ui-btn ui-btn-sm ui-btn-outline relative shrink-0 whitespace-nowrap"
+            @click="openTaskModal"
+          >
+            <span class="flex items-center gap-2">
+              任务管理
+              <template v-if="isTaskRunning">
+                <span class="flex items-center gap-1.5 text-xs text-sky-500">
+                  <span class="relative flex h-2 w-2">
+                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-500 opacity-75"></span>
+                    <span class="relative inline-flex h-2 w-2 rounded-full bg-sky-500"></span>
+                  </span>
+                  {{ taskProgressText }}
+                </span>
+              </template>
+            </span>
+          </button>
+          <div class="w-[140px] shrink-0">
             <button
+              ref="moreActionsTriggerRef"
               type="button"
-              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm text-foreground transition-colors
-                     hover:bg-accent"
-              @click="triggerImportFile(); closeMoreActions()"
+              class="ui-input-sm flex w-full items-center justify-between gap-2 text-foreground hover:border-primary"
+              :class="showMoreActions ? 'border-primary' : ''"
+              @click="toggleMoreActions"
             >
-              导入文件
+              <span class="truncate">更多操作</span>
+              <svg aria-hidden="true" viewBox="0 0 20 20" class="h-4 w-4 shrink-0" fill="currentColor">
+                <path d="M5 7l5 6 5-6H5z" />
+              </svg>
+            </button>
+          </div>
+          <Teleport to="body">
+            <div
+              v-if="showMoreActions"
+              ref="moreActionsMenuRef"
+              class="ui-floating-panel fixed z-[120] space-y-1"
+              :style="moreActionsMenuStyle"
+            >
+              <button
+                type="button"
+                class="ui-menu-item"
+                @click="triggerImportFile(); closeMoreActions()"
+              >
+                导入文件
+              </button>
+              <button
+                type="button"
+                class="ui-menu-item"
+                @click="openExportModal(); closeMoreActions()"
+              >
+                导出账户
+              </button>
+              <div class="my-1 border-t border-border/60"></div>
+              <button
+                type="button"
+                class="ui-menu-item transition-colors"
+                :class="isRegistering
+                  ? 'cursor-not-allowed text-muted-foreground'
+                  : 'text-foreground hover:bg-accent'"
+                :disabled="isRegistering"
+                @click="handleRefreshExpiring(); closeMoreActions()"
+              >
+                刷新过期
+              </button>
+              <button
+                type="button"
+                class="ui-menu-item transition-colors"
+                :class="!selectedCount || isRegistering
+                  ? 'cursor-not-allowed text-muted-foreground'
+                  : 'text-foreground hover:bg-accent'"
+                :disabled="!selectedCount || isRegistering"
+                @click="handleRefreshSelected(); closeMoreActions()"
+              >
+                刷新选中
+              </button>
+              <div class="my-1 border-t border-border/60"></div>
+              <button
+                type="button"
+                class="ui-menu-item transition-colors"
+                :class="!selectedCount || isOperating
+                  ? 'cursor-not-allowed text-muted-foreground'
+                  : 'text-foreground hover:bg-accent'"
+                :disabled="!selectedCount || isOperating"
+                @click="handleBulkEnable(); closeMoreActions()"
+              >
+                <span v-if="isOperating" class="flex items-center gap-2">
+                  <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  处理中...
+                </span>
+                <span v-else>批量启用</span>
+              </button>
+              <button
+                type="button"
+                class="ui-menu-item transition-colors"
+                :class="!selectedCount || isOperating
+                  ? 'cursor-not-allowed text-muted-foreground'
+                  : 'text-foreground hover:bg-accent'"
+                :disabled="!selectedCount || isOperating"
+                @click="handleBulkDisable(); closeMoreActions()"
+              >
+                <span v-if="isOperating" class="flex items-center gap-2">
+                  <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  处理中...
+                </span>
+                <span v-else>批量禁用</span>
+              </button>
+              <button
+                type="button"
+                class="ui-menu-item transition-colors"
+                :class="!selectedCount || isOperating
+                  ? 'cursor-not-allowed text-muted-foreground'
+                  : 'text-destructive hover:bg-destructive/10'"
+                :disabled="!selectedCount || isOperating"
+                @click="handleBulkDelete(); closeMoreActions()"
+              >
+                <span v-if="isOperating" class="flex items-center gap-2">
+                  <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  处理中...
+                </span>
+                <span v-else>批量删除</span>
+              </button>
+            </div>
+          </Teleport>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <Checkbox :modelValue="allSelected" @update:modelValue="toggleSelectAll">
+            全选当前结果
+          </Checkbox>
+          <span class="rounded-full border border-border bg-muted/30 px-3 py-1.5">
+            账号总数 {{ filteredAccounts.length }}
+          </span>
+          <span class="rounded-full border border-border bg-muted/30 px-3 py-1.5">
+            已选 {{ selectedCount }}
+          </span>
+          <div class="flex items-center gap-2">
+            <button
+              class="flex h-8 w-8 items-center justify-center rounded-full border transition-colors"
+              :class="viewMode === 'table'
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'"
+              @click="viewMode = 'table'"
+              title="列表视图"
+              aria-label="列表视图"
+            >
+              <svg viewBox="0 0 20 20" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+                <path d="M4 5.5h12" />
+                <path d="M4 10h12" />
+                <path d="M4 14.5h12" />
+              </svg>
             </button>
             <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm text-foreground transition-colors
-                     hover:bg-accent"
-              @click="openExportModal(); closeMoreActions()"
+              class="flex h-8 w-8 items-center justify-center rounded-full border transition-colors"
+              :class="viewMode === 'card'
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'"
+              @click="viewMode = 'card'"
+              title="卡片视图"
+              aria-label="卡片视图"
             >
-              导出账户
-            </button>
-            <div class="my-1 border-t border-border/60"></div>
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-colors"
-              :class="isRegistering
-                ? 'cursor-not-allowed text-muted-foreground'
-                : 'text-foreground hover:bg-accent'"
-              :disabled="isRegistering"
-              @click="handleRefreshExpiring(); closeMoreActions()"
-            >
-              刷新过期
-            </button>
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-colors"
-              :class="!selectedCount || isRegistering
-                ? 'cursor-not-allowed text-muted-foreground'
-                : 'text-foreground hover:bg-accent'"
-              :disabled="!selectedCount || isRegistering"
-              @click="handleRefreshSelected(); closeMoreActions()"
-            >
-              刷新选中
-            </button>
-            <div class="my-1 border-t border-border/60"></div>
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-colors"
-              :class="!selectedCount || isOperating
-                ? 'cursor-not-allowed text-muted-foreground'
-                : 'text-foreground hover:bg-accent'"
-              :disabled="!selectedCount || isOperating"
-              @click="handleBulkEnable(); closeMoreActions()"
-            >
-              <span v-if="isOperating" class="flex items-center gap-2">
-                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                处理中...
-              </span>
-              <span v-else>批量启用</span>
-            </button>
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-colors"
-              :class="!selectedCount || isOperating
-                ? 'cursor-not-allowed text-muted-foreground'
-                : 'text-foreground hover:bg-accent'"
-              :disabled="!selectedCount || isOperating"
-              @click="handleBulkDisable(); closeMoreActions()"
-            >
-              <span v-if="isOperating" class="flex items-center gap-2">
-                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                处理中...
-              </span>
-              <span v-else>批量禁用</span>
-            </button>
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-colors"
-              :class="!selectedCount || isOperating
-                ? 'cursor-not-allowed text-muted-foreground'
-                : 'text-destructive hover:bg-destructive/10'"
-              :disabled="!selectedCount || isOperating"
-              @click="handleBulkDelete(); closeMoreActions()"
-            >
-              <span v-if="isOperating" class="flex items-center gap-2">
-                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                处理中...
-              </span>
-              <span v-else>批量删除</span>
+              <svg viewBox="0 0 20 20" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1" />
+                <rect x="11" y="3.5" width="5.5" height="5.5" rx="1" />
+                <rect x="3.5" y="11" width="5.5" height="5.5" rx="1" />
+                <rect x="11" y="11" width="5.5" height="5.5" rx="1" />
+              </svg>
             </button>
           </div>
         </div>
@@ -242,7 +280,7 @@
         <div
           v-for="account in paginatedAccounts"
           :key="account.id"
-          class="rounded-2xl border border-border bg-card p-4"
+          class="ui-card"
           :class="rowClass(account)"
           @click="toggleSelect(account.id)"
         >
@@ -308,16 +346,14 @@
 
           <div class="mt-4 flex flex-wrap items-center gap-2">
             <button
-              class="rounded-full border border-border px-3 py-1 text-xs text-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-xs ui-btn-outline"
               @click.stop="openEdit(account.id)"
             >
               编辑
             </button>
             <button
               v-if="shouldShowEnable(account)"
-              class="rounded-full border border-border px-3 py-1 text-xs text-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-xs ui-btn-outline"
               @click.stop
               @click="handleEnable(account.id)"
             >
@@ -325,16 +361,14 @@
             </button>
             <button
               v-else
-              class="rounded-full border border-border px-3 py-1 text-xs text-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-xs ui-btn-outline"
               @click.stop
               @click="handleDisable(account.id)"
             >
               禁用
             </button>
             <button
-              class="rounded-full border border-border px-3 py-1 text-xs text-destructive transition-colors
-                     hover:border-destructive hover:text-destructive"
+              class="ui-btn ui-btn-xs ui-btn-danger"
               @click.stop
               @click="handleDelete(account.id)"
             >
@@ -347,7 +381,7 @@
         </div>
       </div>
 
-      <div v-else class="relative mt-6 overflow-x-auto overflow-y-visible">
+      <div v-else class="scrollbar-slim relative mt-6 overflow-x-auto">
         <table class="min-w-full text-left text-sm">
           <thead class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
             <tr>
@@ -431,31 +465,27 @@
               <td class="py-4 text-right">
                 <div class="flex flex-wrap justify-end gap-2">
                   <button
-                    class="rounded-full border border-border px-3 py-1 text-xs text-foreground transition-colors
-                           hover:border-primary hover:text-primary"
+                    class="ui-btn ui-btn-xs ui-btn-outline"
                     @click.stop="openEdit(account.id)"
                   >
                     编辑
                   </button>
                   <button
                     v-if="shouldShowEnable(account)"
-                    class="rounded-full border border-border px-3 py-1 text-xs text-foreground transition-colors
-                           hover:border-primary hover:text-primary"
+                    class="ui-btn ui-btn-xs ui-btn-outline"
                     @click.stop="handleEnable(account.id)"
                   >
                     启用
                   </button>
                   <button
                     v-else
-                    class="rounded-full border border-border px-3 py-1 text-xs text-foreground transition-colors
-                           hover:border-primary hover:text-primary"
+                    class="ui-btn ui-btn-xs ui-btn-outline"
                     @click.stop="handleDisable(account.id)"
                   >
                     禁用
                   </button>
                   <button
-                    class="rounded-full border border-border px-3 py-1 text-xs text-destructive transition-colors
-                           hover:border-destructive hover:text-destructive"
+                    class="ui-btn ui-btn-xs ui-btn-danger"
                     @click.stop="handleDelete(account.id)"
                   >
                     删除
@@ -474,7 +504,7 @@
         </div>
         <div class="flex items-center gap-2">
           <button
-            class="rounded-full border border-border px-4 py-2 text-sm transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            class="ui-btn ui-btn-sm ui-btn-outline"
             :disabled="currentPage === 1"
             @click="currentPage--"
           >
@@ -482,7 +512,7 @@
           </button>
           <span class="text-sm text-muted-foreground">{{ currentPage }} / {{ totalPages }}</span>
           <button
-            class="rounded-full border border-border px-4 py-2 text-sm transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            class="ui-btn ui-btn-sm ui-btn-outline"
             :disabled="currentPage === totalPages"
             @click="currentPage++"
           >
@@ -494,7 +524,7 @@
   </div>
   <Teleport to="body">
     <div v-if="isRegisterOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4">
-      <div class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl">
+      <div class="ui-surface flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden">
         <div class="flex items-center justify-between border-b border-border/60 px-6 py-4">
           <div>
             <p class="text-sm font-medium text-foreground">添加账户</p>
@@ -503,7 +533,7 @@
             </p>
           </div>
           <button
-            class="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center text-muted-foreground"
             @click="closeRegisterModal"
           >
             关闭
@@ -512,19 +542,19 @@
 
         <div class="scrollbar-slim flex-1 overflow-y-auto px-6 py-4">
           <div class="space-y-4 text-sm">
-          <div class="flex rounded-full border border-border bg-muted/30 p-1 text-xs">
+          <div class="ui-segmented text-xs">
             <button
               type="button"
-              class="flex-1 rounded-full px-3 py-2 font-medium transition-colors"
-              :class="addMode === 'register' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'"
+              class="ui-segmented-btn flex-1 justify-center px-3 py-2"
+              :class="addMode === 'register' ? 'ui-segmented-btn-active' : ''"
               @click="addMode = 'register'"
             >
               自动注册
             </button>
             <button
               type="button"
-              class="flex-1 rounded-full px-3 py-2 font-medium transition-colors"
-              :class="addMode === 'import' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'"
+              class="ui-segmented-btn flex-1 justify-center px-3 py-2"
+              :class="addMode === 'import' ? 'ui-segmented-btn-active' : ''"
               @click="addMode = 'import'"
             >
               批量导入
@@ -543,7 +573,7 @@
               v-model.number="registerCount"
               type="number"
               min="1"
-              class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+              class="ui-input-sm w-full"
             />
             <p class="text-xs text-muted-foreground">
               注册前请确认邮箱已配置，<a href="https://github.com/Dreamy-rain/gemini-business2api?tab=readme-ov-file#-%E9%82%AE%E7%AE%B1%E6%8F%90%E4%BE%9B%E5%95%86%E9%85%8D%E7%BD%AE" target="_blank" class="text-primary hover:underline font-medium">查看邮箱配置文档</a>
@@ -558,8 +588,7 @@
             <div class="flex items-center gap-2">
               <button
                 type="button"
-                class="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors
-                       hover:border-primary hover:text-primary"
+                class="ui-btn ui-btn-xs ui-btn-outline text-muted-foreground"
                 @click="triggerImportFile"
               >
                 上传文件
@@ -568,10 +597,10 @@
             </div>
             <textarea
               v-model="importText"
-              class="min-h-[140px] w-full rounded-2xl border border-input bg-background px-3 py-2 text-xs font-mono"
+              class="ui-textarea-sm min-h-[140px] font-mono text-xs"
               placeholder="duckmail----you@example.com----password&#10;moemail----you@moemail.app----emailId&#10;freemail----you@freemail.local&#10;gptmail----you@example.com&#10;cfmail----you@example.com----jwtToken&#10;user@outlook.com----loginPassword----clientId----refreshToken"
             ></textarea>
-            <div class="rounded-2xl border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <div class="ui-card-sm bg-muted/30 text-xs text-muted-foreground">
               <p>支持三种格式：</p>
               <p class="mt-1 font-mono">duckmail----email----password</p>
               <p class="mt-1 font-mono">moemail----email----emailId</p>
@@ -602,16 +631,14 @@
         <div class="border-t border-border/60 px-6 py-4">
           <div class="flex items-center justify-end gap-2">
             <button
-              class="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-sm ui-btn-outline text-muted-foreground"
               @click="closeRegisterModal"
             >
               取消
             </button>
             <button
               v-if="addMode === 'register'"
-              class="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity
-                     hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              class="ui-btn ui-btn-sm ui-btn-primary"
               :disabled="isRegistering"
               @click="handleRegister"
             >
@@ -619,8 +646,7 @@
             </button>
             <button
               v-else
-              class="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity
-                     hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              class="ui-btn ui-btn-sm ui-btn-primary"
               :disabled="isImporting"
               @click="handleImport"
             >
@@ -634,14 +660,14 @@
 
   <Teleport to="body">
     <div v-if="isTaskOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4">
-      <div class="flex h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl">
+      <div class="ui-surface flex h-[80vh] w-full max-w-2xl flex-col overflow-hidden">
         <div class="flex items-center justify-between border-b border-border/60 px-6 py-4">
           <div>
             <p class="text-sm font-medium text-foreground">任务管理</p>
             <p class="mt-1 text-xs text-muted-foreground">管理注册与刷新任务</p>
           </div>
           <button
-            class="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center text-muted-foreground"
             @click="closeTaskModal"
           >
             关闭
@@ -649,43 +675,33 @@
         </div>
 
         <!-- Tab 导航 -->
-        <div class="flex border-b border-border/60 px-6">
-          <button
-            type="button"
-            class="relative px-4 py-3 text-sm font-medium transition-colors"
-            :class="activeTaskTab === 'current' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'"
-            @click="activeTaskTab = 'current'"
-          >
-            当前任务
-            <span
-              v-if="activeTaskTab === 'current'"
-              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-            ></span>
-          </button>
-          <button
-            type="button"
-            class="relative px-4 py-3 text-sm font-medium transition-colors"
-            :class="activeTaskTab === 'scheduled' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'"
-            @click="activeTaskTab = 'scheduled'; loadScheduledConfig()"
-          >
-            定时任务
-            <span
-              v-if="activeTaskTab === 'scheduled'"
-              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-            ></span>
-          </button>
-          <button
-            type="button"
-            class="relative px-4 py-3 text-sm font-medium transition-colors"
-            :class="activeTaskTab === 'history' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'"
-            @click="activeTaskTab = 'history'"
-          >
-            历史记录
-            <span
-              v-if="activeTaskTab === 'history'"
-              class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-            ></span>
-          </button>
+        <div class="border-b border-border/60 px-6 py-3">
+          <div class="ui-segmented w-full max-w-md">
+            <button
+              type="button"
+              class="ui-segmented-btn flex-1 justify-center"
+              :class="activeTaskTab === 'current' ? 'ui-segmented-btn-active' : ''"
+              @click="activeTaskTab = 'current'"
+            >
+              当前任务
+            </button>
+            <button
+              type="button"
+              class="ui-segmented-btn flex-1 justify-center"
+              :class="activeTaskTab === 'scheduled' ? 'ui-segmented-btn-active' : ''"
+              @click="activeTaskTab = 'scheduled'; loadScheduledConfig()"
+            >
+              定时任务
+            </button>
+            <button
+              type="button"
+              class="ui-segmented-btn flex-1 justify-center"
+              :class="activeTaskTab === 'history' ? 'ui-segmented-btn-active' : ''"
+              @click="activeTaskTab = 'history'"
+            >
+              历史记录
+            </button>
+          </div>
         </div>
 
         <!-- 当前任务 Tab -->
@@ -709,7 +725,7 @@
                 </div>
                 <button
                   v-if="registerTask.status === 'running' || registerTask.status === 'pending'"
-                  class="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-rose-500 hover:text-rose-600"
+                  class="ui-btn ui-btn-xs ui-btn-outline text-muted-foreground hover:border-rose-500 hover:text-rose-600"
                   @click="cancelRegister(registerTask.id)"
                 >
                   中断
@@ -734,7 +750,7 @@
                 </div>
                 <button
                   v-if="loginTask.status === 'running' || loginTask.status === 'pending'"
-                  class="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-rose-500 hover:text-rose-600"
+                  class="ui-btn ui-btn-xs ui-btn-outline text-muted-foreground hover:border-rose-500 hover:text-rose-600"
                   @click="cancelLogin(loginTask.id)"
                 >
                   中断
@@ -761,8 +777,8 @@
               </p>
               <button
                 type="button"
-                class="rounded-full px-3 py-1 text-xs font-medium transition-colors"
-                :class="taskLogMode === 'summary' ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'"
+                class="ui-btn ui-btn-xs"
+                :class="taskLogMode === 'summary' ? 'ui-btn-primary' : 'ui-btn-outline text-muted-foreground'"
                 @click="toggleTaskLogMode"
               >
                 {{ taskLogMode === 'summary' ? '摘要模式' : '详情模式' }}
@@ -770,7 +786,7 @@
             </div>
             <div
               ref="taskLogsRef"
-              class="scrollbar-slim flex-1 overflow-y-auto rounded-2xl border border-border bg-muted/30 p-3"
+              class="scrollbar-slim flex-1 overflow-y-auto ui-card-sm bg-muted/30 p-3"
             >
               <div v-if="visibleRegisterLogs.length" class="space-y-2">
                 <p class="text-xs font-semibold text-foreground">注册日志</p>
@@ -798,7 +814,7 @@
             v-if="!automationError && !registerTask && !loginTask && !registerLogs.length && !loginLogs.length"
             class="flex-1 px-6 py-4"
           >
-            <div class="rounded-2xl border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <div class="ui-card-sm bg-muted/30 text-xs text-muted-foreground">
               暂无任务
             </div>
           </div>
@@ -806,8 +822,7 @@
           <!-- 固定底部按钮区域 -->
           <div class="flex items-center justify-end gap-2 border-t border-border/60 px-6 py-4">
             <button
-              class="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors
-                     hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              class="ui-btn ui-btn-sm ui-btn-outline text-muted-foreground"
               :disabled="!registerLogs.length && !loginLogs.length && !registerTask && !loginTask && !automationError"
               @click="clearTaskLogs"
             >
@@ -845,7 +860,7 @@
                       <input
                         v-model="scheduledRefreshCron"
                         type="text"
-                        class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                        class="ui-input-sm w-full"
                         placeholder="08:00,20:00"
                       />
                       <p class="text-xs text-muted-foreground">
@@ -862,7 +877,7 @@
                         type="number"
                         min="1"
                         max="48"
-                        class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                        class="ui-input-sm w-full"
                       />
                     </div>
 
@@ -873,7 +888,7 @@
                         type="number"
                         min="0"
                         max="5"
-                        class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                        class="ui-input-sm w-full"
                       />
                       <p class="text-xs text-muted-foreground">
                         验证码首次等待超时后，额外尝试重发的次数（默认 2，0 表示不重发）
@@ -887,46 +902,46 @@
                         type="number"
                         min="1"
                         max="168"
-                        class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                        class="ui-input-sm w-full"
                       />
                       <p class="text-xs text-muted-foreground">
                         当账号距离过期小于等于该值时，会触发自动刷新
                       </p>
                     </div>
 
-                    <div class="space-y-3 rounded-2xl border border-border bg-muted/20 px-4 py-3">
+                    <div class="ui-card-sm bg-muted/20 px-4 py-3">
                       <div>
                         <p class="text-sm font-medium text-foreground">浏览器模式</p>
                         <p class="mt-1 text-xs text-muted-foreground">normal 正常窗口；silent 静默最小化（有头但尽量不抢焦点）；headless 无头</p>
                       </div>
-                      <div class="grid grid-cols-3 gap-2">
+                      <div class="ui-segmented">
                         <button
                           type="button"
-                          class="rounded-xl border px-3 py-2 text-xs transition-colors"
-                          :class="browserMode === 'normal' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+                          class="ui-segmented-btn flex-1 justify-center"
+                          :class="browserMode === 'normal' ? 'ui-segmented-btn-active text-primary' : ''"
                           @click="browserMode = 'normal'"
                         >
                           normal
                         </button>
                         <button
                           type="button"
-                          class="rounded-xl border px-3 py-2 text-xs transition-colors"
-                          :class="browserMode === 'silent' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+                          class="ui-segmented-btn flex-1 justify-center"
+                          :class="browserMode === 'silent' ? 'ui-segmented-btn-active text-primary' : ''"
                           @click="browserMode = 'silent'"
                         >
                           silent
                         </button>
                         <button
                           type="button"
-                          class="rounded-xl border px-3 py-2 text-xs transition-colors"
-                          :class="browserMode === 'headless' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+                          class="ui-segmented-btn flex-1 justify-center"
+                          :class="browserMode === 'headless' ? 'ui-segmented-btn-active text-primary' : ''"
                           @click="browserMode = 'headless'"
                         >
                           headless
                         </button>
                       </div>
                     </div>
-                    <div class="rounded-2xl border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                    <div class="ui-card-sm bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
                       <p class="mb-2 font-medium text-foreground">说明</p>
                       <ul class="list-inside list-disc space-y-1">
                         <li>同一时间只会执行一个刷新任务，新触发会复用当前任务</li>
@@ -942,15 +957,13 @@
             <!-- 固定底部按钮区域 -->
             <div class="flex items-center justify-end gap-2 border-t border-border/60 px-6 py-4">
               <button
-                class="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors
-                       hover:border-primary hover:text-primary"
+                class="ui-btn ui-btn-sm ui-btn-outline text-muted-foreground"
                 @click="loadScheduledConfig"
               >
                 重置
               </button>
               <button
-                class="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity
-                       hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                class="ui-btn ui-btn-sm ui-btn-primary"
                 :disabled="isSavingScheduledConfig"
                 @click="saveScheduledConfig"
               >
@@ -969,7 +982,7 @@
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             </div>
-            <div v-else-if="taskHistory.length === 0" class="rounded-2xl border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <div v-else-if="taskHistory.length === 0" class="ui-card-sm bg-muted/30 text-xs text-muted-foreground">
               <p class="font-medium text-foreground mb-2">暂无历史记录</p>
               <p>完成的任务将显示在这里</p>
             </div>
@@ -977,7 +990,7 @@
               <div
                 v-for="(record, index) in taskHistory"
                 :key="index"
-                class="rounded-2xl border border-border bg-card px-4 py-3 text-sm"
+                class="ui-card-sm text-sm"
               >
                 <div class="flex items-center justify-between mb-2">
                   <span class="flex items-center gap-2 font-medium text-foreground">
@@ -1011,8 +1024,7 @@
           <!-- 固定底部按钮区域 -->
           <div class="flex items-center justify-end gap-2 border-t border-border/60 px-6 py-4">
             <button
-              class="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors
-                     hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              class="ui-btn ui-btn-sm ui-btn-outline text-muted-foreground"
               :disabled="taskHistory.length === 0"
               @click="clearTaskHistory"
             >
@@ -1025,11 +1037,11 @@
   </Teleport>
   <Teleport to="body">
     <div v-if="isEditOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4">
-      <div class="w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-xl">
+      <div class="ui-overlay-panel w-full max-w-lg">
         <div class="flex items-center justify-between">
           <p class="text-sm font-medium text-foreground">编辑账号</p>
           <button
-            class="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center text-muted-foreground"
             @click="closeEdit"
           >
             关闭
@@ -1045,14 +1057,14 @@
           <input
             v-model="editForm.id"
             type="text"
-            class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+            class="ui-input-sm w-full"
             disabled
           />
 
           <label class="block text-xs text-muted-foreground">secure_c_ses</label>
           <textarea
             v-model="editForm.secure_c_ses"
-            class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+            class="ui-textarea-sm"
             rows="3"
           ></textarea>
 
@@ -1060,43 +1072,41 @@
           <input
             v-model="editForm.csesidx"
             type="text"
-            class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+            class="ui-input-sm w-full"
           />
 
           <label class="block text-xs text-muted-foreground">config_id</label>
           <input
             v-model="editForm.config_id"
             type="text"
-            class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+            class="ui-input-sm w-full"
           />
 
           <label class="block text-xs text-muted-foreground">host_c_oses</label>
           <input
             v-model="editForm.host_c_oses"
             type="text"
-            class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+            class="ui-input-sm w-full"
           />
 
           <label class="block text-xs text-muted-foreground">expires_at</label>
           <input
             v-model="editForm.expires_at"
             type="text"
-            class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+            class="ui-input-sm w-full"
             placeholder="2025-12-23 10:59:21"
           />
         </div>
 
         <div class="mt-6 flex items-center justify-end gap-2">
           <button
-            class="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors
-                   hover:border-primary hover:text-primary"
+            class="ui-btn ui-btn-sm ui-btn-outline text-muted-foreground"
             @click="closeEdit"
           >
             取消
           </button>
           <button
-            class="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity
-                   hover:opacity-90"
+            class="ui-btn ui-btn-sm ui-btn-primary"
             @click="saveEdit"
           >
             保存
@@ -1108,19 +1118,18 @@
 
   <Teleport to="body">
     <div v-if="isConfigOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4">
-      <div class="w-full max-w-3xl rounded-3xl border border-border bg-card p-6 shadow-xl">
+      <div class="ui-overlay-panel w-full max-w-3xl">
         <div class="flex items-center justify-between">
           <p class="text-sm font-medium text-foreground">账户配置（JSON）</p>
           <div class="flex items-center gap-2">
             <button
-              class="rounded-full bg-foreground px-3 py-1 text-xs text-background transition-opacity
-                     hover:opacity-90"
+              class="ui-btn ui-btn-xs ui-btn-primary"
               @click="toggleConfigMask"
             >
               {{ configMasked ? '显示原文' : '脱敏显示' }}
             </button>
             <button
-              class="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center text-muted-foreground"
               @click="closeConfigPanel"
             >
               关闭
@@ -1135,7 +1144,7 @@
         <div class="mt-4">
           <textarea
             v-model="configJson"
-            class="h-96 w-full rounded-2xl border border-input bg-background px-4 py-3 font-mono text-xs text-foreground"
+            class="ui-textarea-sm h-96 font-mono text-xs"
             spellcheck="false"
             :readonly="configMasked"
           ></textarea>
@@ -1143,15 +1152,13 @@
 
         <div class="mt-6 flex items-center justify-end gap-2">
           <button
-            class="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors
-                   hover:border-primary hover:text-primary"
+            class="ui-btn ui-btn-sm ui-btn-outline text-muted-foreground"
             @click="closeConfigPanel"
           >
             取消
           </button>
           <button
-            class="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity
-                   hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            class="ui-btn ui-btn-sm ui-btn-primary"
             @click="saveConfigPanel"
             :disabled="configMasked"
           >
@@ -1163,14 +1170,14 @@
   </Teleport>
   <Teleport to="body">
     <div v-if="isExportOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4">
-      <div class="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl">
+      <div class="ui-surface flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden">
         <div class="flex items-center justify-between border-b border-border/60 px-6 py-4">
           <div>
             <p class="text-sm font-medium text-foreground">导出账号配置</p>
             <p class="mt-1 text-xs text-muted-foreground">选择导出范围与格式</p>
           </div>
           <button
-            class="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center text-muted-foreground"
             @click="closeExportModal"
           >
             关闭
@@ -1178,19 +1185,19 @@
         </div>
         <div class="scrollbar-slim flex-1 overflow-y-auto px-6 py-4">
           <div class="space-y-4 text-sm">
-            <div class="flex rounded-full border border-border bg-muted/30 p-1 text-xs">
+            <div class="ui-segmented text-xs">
               <button
                 type="button"
-                class="flex-1 rounded-full px-3 py-2 font-medium transition-colors"
-                :class="exportScope === 'all' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'"
+                class="ui-segmented-btn flex-1 justify-center px-3 py-2"
+                :class="exportScope === 'all' ? 'ui-segmented-btn-active' : ''"
                 @click="exportScope = 'all'"
               >
                 全部
               </button>
               <button
                 type="button"
-                class="flex-1 rounded-full px-3 py-2 font-medium transition-colors"
-                :class="exportScope === 'selected' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'"
+                class="ui-segmented-btn flex-1 justify-center px-3 py-2"
+                :class="exportScope === 'selected' ? 'ui-segmented-btn-active' : ''"
                 :disabled="!selectedCount"
                 @click="exportScope = 'selected'"
               >
@@ -1198,19 +1205,19 @@
               </button>
             </div>
 
-            <div class="flex rounded-full border border-border bg-muted/30 p-1 text-xs">
+            <div class="ui-segmented text-xs">
               <button
                 type="button"
-                class="flex-1 rounded-full px-3 py-2 font-medium transition-colors"
-                :class="exportFormat === 'json' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'"
+                class="ui-segmented-btn flex-1 justify-center px-3 py-2"
+                :class="exportFormat === 'json' ? 'ui-segmented-btn-active' : ''"
                 @click="exportFormat = 'json'"
               >
                 JSON
               </button>
               <button
                 type="button"
-                class="flex-1 rounded-full px-3 py-2 font-medium transition-colors"
-                :class="exportFormat === 'txt' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'"
+                class="ui-segmented-btn flex-1 justify-center px-3 py-2"
+                :class="exportFormat === 'txt' ? 'ui-segmented-btn-active' : ''"
                 @click="exportFormat = 'txt'"
               >
                 TXT
@@ -1232,15 +1239,13 @@
         <div class="border-t border-border/60 px-6 py-4">
           <div class="flex items-center justify-end gap-2">
             <button
-              class="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors
-                     hover:border-primary hover:text-primary"
+              class="ui-btn ui-btn-sm ui-btn-outline text-muted-foreground"
               @click="closeExportModal"
             >
               取消
             </button>
             <button
-              class="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity
-                     hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              class="ui-btn ui-btn-sm ui-btn-primary"
               :disabled="exportScope === 'selected' && !selectedCount"
               @click="runExport"
             >
@@ -1314,7 +1319,9 @@ const exportFormat = ref<'json' | 'txt'>('json')
 const isTaskOpen = ref(false)
 const activeTaskTab = ref<'current' | 'scheduled' | 'history'>('current')
 const showMoreActions = ref(false)
-const moreActionsRef = ref<HTMLDivElement | null>(null)
+const moreActionsTriggerRef = ref<HTMLButtonElement | null>(null)
+const moreActionsMenuRef = ref<HTMLDivElement | null>(null)
+const moreActionsMenuPosition = ref({ top: 0, left: 0, width: 176 })
 const lastRegisterTaskId = ref<string | null>(null)
 const lastLoginTaskId = ref<string | null>(null)
 const scheduledRefreshEnabled = ref(false)
@@ -1435,6 +1442,11 @@ const selectedCount = computed(() => selectedIds.value.size)
 const allSelected = computed(() =>
   filteredAccounts.value.length > 0 && filteredAccounts.value.every(account => selectedIds.value.has(account.id))
 )
+const moreActionsMenuStyle = computed(() => ({
+  top: `${moreActionsMenuPosition.value.top}px`,
+  left: `${moreActionsMenuPosition.value.left}px`,
+  width: `${moreActionsMenuPosition.value.width}px`,
+}))
 
 watch([searchQuery, statusFilter, sortBy], () => {
   currentPage.value = 1
@@ -2409,19 +2421,61 @@ const cancelLogin = async (taskId: string) => {
   }
 }
 
-const toggleMoreActions = () => {
-  showMoreActions.value = !showMoreActions.value
+const updateMoreActionsMenuPosition = () => {
+  if (!moreActionsTriggerRef.value) return
+  const rect = moreActionsTriggerRef.value.getBoundingClientRect()
+  const spacing = 8
+  const padding = 8
+  const menuWidth = rect.width
+  const menuHeight = moreActionsMenuRef.value?.offsetHeight || 240
+
+  let left = rect.left
+  let top = rect.bottom + spacing
+
+  const maxLeft = window.innerWidth - menuWidth - padding
+  const maxTop = window.innerHeight - menuHeight - padding
+
+  left = Math.min(Math.max(left, padding), Math.max(padding, maxLeft))
+  top = Math.min(Math.max(top, padding), Math.max(padding, maxTop))
+
+  moreActionsMenuPosition.value = { top, left, width: menuWidth }
+}
+
+const openMoreActions = async () => {
+  showMoreActions.value = true
+  await nextTick()
+  updateMoreActionsMenuPosition()
+  requestAnimationFrame(updateMoreActionsMenuPosition)
 }
 
 const closeMoreActions = () => {
   showMoreActions.value = false
 }
 
+const toggleMoreActions = () => {
+  if (showMoreActions.value) {
+    closeMoreActions()
+    return
+  }
+  void openMoreActions()
+}
+
 const handleMoreActionsClick = (event: MouseEvent) => {
   if (!showMoreActions.value) return
   const target = event.target as Node
-  if (moreActionsRef.value && !moreActionsRef.value.contains(target)) {
-    showMoreActions.value = false
+  if (moreActionsTriggerRef.value?.contains(target)) return
+  if (moreActionsMenuRef.value?.contains(target)) return
+  closeMoreActions()
+}
+
+const handleMoreActionsViewportChange = () => {
+  if (!showMoreActions.value) return
+  updateMoreActionsMenuPosition()
+}
+
+const handleMoreActionsKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    closeMoreActions()
   }
 }
 
@@ -2441,6 +2495,9 @@ onMounted(async () => {
   await loadCurrentTasks()
   startBackgroundTaskPolling()
   document.addEventListener('click', handleMoreActionsClick)
+  document.addEventListener('keydown', handleMoreActionsKeydown)
+  window.addEventListener('resize', handleMoreActionsViewportChange)
+  window.addEventListener('scroll', handleMoreActionsViewportChange, true)
 })
 
 const registerLogs = computed(() => {
@@ -2496,6 +2553,9 @@ onBeforeUnmount(() => {
   clearLoginTimer()
   clearBackgroundTaskTimer()
   document.removeEventListener('click', handleMoreActionsClick)
+  document.removeEventListener('keydown', handleMoreActionsKeydown)
+  window.removeEventListener('resize', handleMoreActionsViewportChange)
+  window.removeEventListener('scroll', handleMoreActionsViewportChange, true)
 })
 
 const statusLabel = (account: AdminAccount) => {
@@ -3117,7 +3177,6 @@ const handleRegister = async () => {
     syncRegisterTask(task)
     startRegisterPolling(task.id)
     isRegisterOpen.value = false
-    isTaskOpen.value = true
   } catch (error: any) {
     automationError.value = error.message || '启动注册失败'
     isRegistering.value = false
@@ -3133,8 +3192,6 @@ const startRefresh = async (accountIds: string[]) => {
     const task = await accountsApi.startLogin(accountIds)
     syncLoginTask(task)
     startLoginPolling(task.id)
-    // 自动打开任务状态弹窗
-    openTaskModal()
   } catch (error: any) {
     automationError.value = error.message || '启动刷新失败'
     toast.error(error.message || '启动刷新失败')
@@ -3155,8 +3212,6 @@ const handleRefreshExpiring = async () => {
     if (taskOrIdle && 'id' in taskOrIdle) {
       syncLoginTask(taskOrIdle)
       startLoginPolling(taskOrIdle.id)
-      // 自动打开任务状态弹窗
-      openTaskModal()
       return
     }
     // 没有新任务时，尝试读取当前任务（可能已有 running/pending）
@@ -3164,7 +3219,6 @@ const handleRefreshExpiring = async () => {
     if (current && 'id' in current) {
       syncLoginTask(current)
       startLoginPolling(current.id)
-      openTaskModal()
       return
     }
     isRefreshing.value = false
@@ -3175,3 +3229,6 @@ const handleRefreshExpiring = async () => {
   }
 }
 </script>
+
+
+

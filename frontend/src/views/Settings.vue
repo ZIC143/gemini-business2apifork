@@ -1,15 +1,14 @@
 <template>
   <div class="space-y-8">
-    <section v-if="isLoading" class="rounded-3xl border border-border bg-card p-6 text-sm text-muted-foreground">
+    <section v-if="isLoading" class="ui-panel text-sm text-muted-foreground">
       正在加载设置...
     </section>
 
-    <section v-else class="rounded-3xl border border-border bg-card p-6">
+    <section v-else class="ui-panel">
       <div class="flex items-center justify-between">
-        <p class="text-base font-semibold text-foreground">配置面板</p>
+        <p class="ui-section-title">配置面板</p>
         <button
-          class="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity
-                 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          class="ui-btn ui-btn-xs ui-btn-primary min-w-14 justify-center"
           :disabled="isSaving || !localSettings"
           @click="handleSave"
         >
@@ -24,8 +23,8 @@
       <div v-if="localSettings" class="mt-6 space-y-8">
         <div class="grid gap-4 lg:grid-cols-3">
           <div class="space-y-4">
-            <div class="rounded-2xl border border-border bg-card p-4">
-              <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">基础</p>
+            <div class="ui-card">
+              <p class="ui-section-kicker">基础</p>
               <div class="mt-4 space-y-3">
                 <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <label class="block">API 密钥</label>
@@ -34,14 +33,14 @@
                 <input
                   v-model="localSettings.basic.api_key"
                   type="text"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="可选，多个密钥用逗号分隔"
                 />
                 <label class="block text-xs text-muted-foreground">基础地址</label>
                 <input
                   v-model="localSettings.basic.base_url"
                   type="text"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="自动检测或手动填写"
                 />
                 <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -84,7 +83,7 @@
                   type="text"
                   :disabled="!systemProxyEnabled || nodeProxyEnabled"
                   :class="(!systemProxyEnabled || nodeProxyEnabled) ? 'opacity-50 cursor-not-allowed' : ''"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="http://127.0.0.1:7890 | no_proxy=localhost,127.0.0.1"
                 />
                 <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -96,7 +95,7 @@
                   type="text"
                   :disabled="!systemProxyEnabled || nodeProxyEnabled"
                   :class="(!systemProxyEnabled || nodeProxyEnabled) ? 'opacity-50 cursor-not-allowed' : ''"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="http://127.0.0.1:7890 | no_proxy=localhost,127.0.0.1"
                 />
                 <div v-if="nodeProxyEnabled" class="mt-2 rounded-2xl bg-amber-500/10 border border-amber-500/20 p-3">
@@ -105,37 +104,37 @@
               </div>
             </div>
 
-            <div class="rounded-2xl border border-border bg-card p-4">
-              <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">重试</p>
+            <div class="ui-card">
+              <p class="ui-section-kicker">重试</p>
               <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <label class="col-span-2 text-xs text-muted-foreground">账户切换次数</label>
-                <input v-model.number="localSettings.retry.max_account_switch_tries" type="number" min="1" class="col-span-2 rounded-2xl border border-input bg-background px-3 py-2" />
+                <input v-model.number="localSettings.retry.max_account_switch_tries" type="number" min="1" class="col-span-2 ui-input-sm" />
 
                 <label class="col-span-2 text-xs text-muted-foreground">对话冷却（小时）</label>
-                <input v-model.number="textRateLimitCooldownHours" type="number" min="1" max="24" step="1" class="col-span-2 rounded-2xl border border-input bg-background px-3 py-2" />
+                <input v-model.number="textRateLimitCooldownHours" type="number" min="1" max="24" step="1" class="col-span-2 ui-input-sm" />
 
                 <label class="col-span-2 text-xs text-muted-foreground">绘图冷却（小时）</label>
-                <input v-model.number="imagesRateLimitCooldownHours" type="number" min="1" max="24" step="1" class="col-span-2 rounded-2xl border border-input bg-background px-3 py-2" />
+                <input v-model.number="imagesRateLimitCooldownHours" type="number" min="1" max="24" step="1" class="col-span-2 ui-input-sm" />
 
                 <label class="col-span-2 text-xs text-muted-foreground">视频冷却（小时）</label>
-                <input v-model.number="videosRateLimitCooldownHours" type="number" min="1" max="24" step="1" class="col-span-2 rounded-2xl border border-input bg-background px-3 py-2" />
+                <input v-model.number="videosRateLimitCooldownHours" type="number" min="1" max="24" step="1" class="col-span-2 ui-input-sm" />
 
                 <label class="col-span-2 text-xs text-muted-foreground">会话缓存秒数</label>
-                <input v-model.number="localSettings.retry.session_cache_ttl_seconds" type="number" min="0" class="col-span-2 rounded-2xl border border-input bg-background px-3 py-2" />
+                <input v-model.number="localSettings.retry.session_cache_ttl_seconds" type="number" min="0" class="col-span-2 ui-input-sm" />
 
                 <div class="col-span-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>自动刷新账号间隔（秒，0=关闭）</span>
                   <HelpTip text="仅在数据库存储启用时生效：用于检测账号配置变化并重载列表，不会刷新 Cookie。" />
                 </div>
-                <input v-model.number="localSettings.retry.auto_refresh_accounts_seconds" type="number" min="0" max="600" class="col-span-2 rounded-2xl border border-input bg-background px-3 py-2" />
+                <input v-model.number="localSettings.retry.auto_refresh_accounts_seconds" type="number" min="0" max="600" class="col-span-2 ui-input-sm" />
               </div>
             </div>
 
           </div>
 
           <div class="space-y-4">
-            <div class="rounded-2xl border border-border bg-card p-4">
-              <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">自动注册/刷新</p>
+            <div class="ui-card">
+              <p class="ui-section-kicker">自动注册/刷新</p>
               <div class="mt-4 space-y-3">
                 <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>浏览器模式</span>
@@ -181,21 +180,21 @@
                   <input
                     v-model="localSettings.basic.duckmail_base_url"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="https://api.duckmail.sbs"
                   />
                   <label class="block text-xs text-muted-foreground">DuckMail API 密钥</label>
                   <input
                     v-model="localSettings.basic.duckmail_api_key"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="dk_xxx"
                   />
                   <label class="block text-xs text-muted-foreground">DuckMail 域名（推荐）</label>
                   <input
                     v-model="localSettings.basic.register_domain"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="留空则自动选择"
                   />
                 </template>
@@ -206,21 +205,21 @@
                   <input
                     v-model="localSettings.basic.moemail_base_url"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="https://moemail.app"
                   />
                   <label class="block text-xs text-muted-foreground">Moemail API 密钥</label>
                   <input
                     v-model="localSettings.basic.moemail_api_key"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="X-API-Key"
                   />
                   <label class="block text-xs text-muted-foreground">Moemail 域名（可选，留空随机）</label>
                   <input
                     v-model="localSettings.basic.moemail_domain"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="moemail.app"
                   />
                 </template>
@@ -234,21 +233,21 @@
                   <input
                     v-model="localSettings.basic.freemail_base_url"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="http://your-freemail-server.com"
                   />
                   <label class="block text-xs text-muted-foreground">Freemail JWT Token</label>
                   <input
                     v-model="localSettings.basic.freemail_jwt_token"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="eyJ..."
                   />
                   <label class="block text-xs text-muted-foreground">Freemail 域名（可选，留空随机）</label>
                   <input
                     v-model="localSettings.basic.freemail_domain"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="freemail.local"
                   />
                 </template>
@@ -262,21 +261,21 @@
                   <input
                     v-model="localSettings.basic.gptmail_base_url"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="https://mail.chatgpt.org.uk"
                   />
                   <label class="block text-xs text-muted-foreground">GPTMail API Key</label>
                   <input
                     v-model="localSettings.basic.gptmail_api_key"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="X-API-Key"
                   />
                   <label class="block text-xs text-muted-foreground">GPTMail 邮箱域名（可选，不带@）</label>
                   <input
                     v-model="localSettings.basic.gptmail_domain"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="留空则随机选择"
                   />
                 </template>
@@ -290,21 +289,21 @@
                   <input
                     v-model="localSettings.basic.cfmail_base_url"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="https://your-cfmail-instance.example.com"
                   />
                   <label class="block text-xs text-muted-foreground">访问密码（x-custom-auth，无密码留空）</label>
                   <input
                     v-model="localSettings.basic.cfmail_api_key"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="留空则不使用密码"
                   />
                   <label class="block text-xs text-muted-foreground">邮箱域名（可选，不带@）</label>
                   <input
                     v-model="localSettings.basic.cfmail_domain"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="留空则随机选择"
                   />
                 </template>
@@ -318,7 +317,7 @@
                   <input
                     v-model="localSettings.basic.samplemail_base_url"
                     type="text"
-                    class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                    class="ui-input-sm w-full"
                     placeholder="https://your-sample-mail-worker.example.com"
                   />
                   <p class="text-xs text-muted-foreground">
@@ -331,16 +330,16 @@
                   v-model.number="localSettings.basic.register_default_count"
                   type="number"
                   min="1"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                 />
               </div>
             </div>
           </div>
 
           <div class="space-y-4">
-            <div class="rounded-2xl border border-border bg-card p-4">
+            <div class="ui-card">
               <div class="flex items-center justify-between gap-2">
-                <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">图像生成</p>
+                <p class="ui-section-kicker">图像生成</p>
                 <HelpTip text="不建议开启图像生成功能，容易思考不出图，建议用gemini-imagen" />
               </div>
               <div class="mt-4 space-y-3">
@@ -366,8 +365,8 @@
               </div>
             </div>
 
-            <div class="rounded-2xl border border-border bg-card p-4">
-              <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">视频生成</p>
+            <div class="ui-card">
+              <p class="ui-section-kicker">视频生成</p>
               <div class="mt-4 space-y-3">
                 <label class="block text-xs text-muted-foreground">输出格式（使用 gemini-veo 模型时生效）</label>
                 <SelectMenu
@@ -379,9 +378,9 @@
               </div>
             </div>
 
-            <div class="rounded-2xl border border-border bg-card p-4">
+            <div class="ui-card">
               <div class="flex items-center justify-between gap-2">
-                <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">每日配额</p>
+                <p class="ui-section-kicker">每日配额</p>
                 <HelpTip text="基于 Google 官方限额的主动配额计数，达到上限后自动切换账号。0 表示不限制该类型。" />
               </div>
               <div class="mt-4 space-y-3">
@@ -394,7 +393,7 @@
                   type="number"
                   min="0"
                   max="9999"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="120"
                 />
                 <label class="block text-xs text-muted-foreground">绘图每日上限</label>
@@ -403,7 +402,7 @@
                   type="number"
                   min="0"
                   max="9999"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="2"
                 />
                 <label class="block text-xs text-muted-foreground">视频每日上限</label>
@@ -412,28 +411,28 @@
                   type="number"
                   min="0"
                   max="9999"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="1"
                 />
                 <p class="text-xs text-muted-foreground">每日北京时间 16:00 重置（对齐 Google 太平洋时间午夜）</p>
               </div>
             </div>
 
-            <div class="rounded-2xl border border-border bg-card p-4">
-              <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">公开展示</p>
+            <div class="ui-card">
+              <p class="ui-section-kicker">公开展示</p>
               <div class="mt-4 space-y-3">
                 <label class="block text-xs text-muted-foreground">Logo 地址</label>
                 <input
                   v-model="localSettings.public_display.logo_url"
                   type="text"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="logo 地址"
                 />
                 <label class="block text-xs text-muted-foreground">聊天入口</label>
                 <input
                   v-model="localSettings.public_display.chat_url"
                   type="text"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                   placeholder="聊天入口地址"
                 />
                 <label class="block text-xs text-muted-foreground">会话有效时长</label>
@@ -441,13 +440,13 @@
                   v-model.number="localSettings.session.expire_hours"
                   type="number"
                   min="1"
-                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  class="ui-input-sm w-full"
                 />
               </div>
             </div>
 
-            <div class="rounded-2xl border border-border bg-card p-4">
-              <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">说明</p>
+            <div class="ui-card">
+              <p class="ui-section-kicker">说明</p>
               <p class="mt-4 text-sm text-muted-foreground">
                 保存后会直接写入配置文件并热更新。修改后请关注日志面板确认是否生效。
               </p>

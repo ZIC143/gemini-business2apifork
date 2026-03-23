@@ -1,12 +1,12 @@
 ﻿<template>
   <div class="min-h-screen overflow-x-hidden bg-card/70 text-foreground backdrop-blur">
     <div class="mx-auto w-full max-w-6xl min-w-0 px-4 py-8">
-      <section class="rounded-3xl border border-border bg-card p-6">
+      <section class="ui-panel">
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div class="flex items-center gap-3">
             <img :src="logoUrl" alt="Gemini Business2API" class="h-8 w-8 object-contain" />
             <div>
-              <p class="text-base font-semibold text-foreground">公开日志</p>
+              <p class="ui-section-title">公开日志</p>
             </div>
           </div>
           <div class="flex items-center gap-2 text-xs text-muted-foreground">
@@ -24,7 +24,7 @@
             v-if="chatUrl"
             :href="chatUrl"
             target="_blank"
-            class="text-xs font-medium text-emerald-600 transition hover:text-emerald-500"
+            class="ui-btn ui-btn-sm ui-btn-outline"
           >
             开始对话
           </a>
@@ -35,7 +35,7 @@
           <div
             v-for="card in statCards"
             :key="card.label"
-            class="rounded-2xl border border-border bg-card px-4 py-3 text-center"
+            class="ui-card-sm text-center"
           >
             <div class="text-[11px] text-muted-foreground">{{ card.label }}</div>
             <div class="mt-1 text-lg font-semibold" :style="{ color: card.color || undefined }">
@@ -59,10 +59,10 @@
         </div>
 
         <div v-else-if="logs.length > 0" class="mt-4 max-h-[60vh] space-y-3 overflow-y-auto pr-1 scrollbar-slim">
-          <div v-for="log in visibleLogs" :key="log.request_id" class="rounded-2xl border border-border bg-card">
+          <div v-for="log in visibleLogs" :key="log.request_id" class="ui-surface">
             <button
               type="button"
-              class="flex w-full flex-wrap items-center gap-2 rounded-2xl bg-secondary/40 px-4 py-3 text-left text-xs transition hover:bg-secondary/60"
+              class="ui-menu-item h-auto w-full flex-wrap rounded-2xl bg-secondary/40 px-4 py-3 text-left text-xs hover:bg-secondary/60"
               @click="toggleGroup(log.request_id)"
             >
               <span :class="statusBadgeClass(log.status)">{{ statusLabel(log.status) }}</span>
@@ -80,7 +80,7 @@
               <div
                 v-for="event in log.events"
                 :key="`${log.request_id}-${event.time}-${event.type}`"
-                class="cv-auto flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                class="cv-auto ui-card-sm flex flex-wrap items-center gap-3 rounded-xl px-3 py-2 text-xs"
               >
                 <div class="text-muted-foreground">{{ event.time }}</div>
                 <span :class="eventBadgeClass(event)">{{ eventLabel(event) }}</span>

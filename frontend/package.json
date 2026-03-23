@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "clean:static": "node ./scripts/clean-static.mjs",
+    "build": "npm run clean:static && tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {

@@ -1,141 +1,167 @@
 <template>
-  <div class="gallery-page">
-    <!-- 顶部工具栏 -->
-    <div class="gallery-toolbar">
-      <div class="toolbar-left">
-        <!-- 筛选标签 -->
-        <div class="filter-tabs">
-          <button
-            class="tab-btn"
-            :class="{ active: activeFilter === 'all' }"
-            @click="activeFilter = 'all'"
-          >
-            全部
-            <span class="tab-count">{{ files.length }}</span>
-          </button>
-          <button
-            class="tab-btn"
-            :class="{ active: activeFilter === 'image' }"
-            @click="activeFilter = 'image'"
-          >
-            图片
-            <span class="tab-count">{{ imageCount }}</span>
-          </button>
-          <button
-            class="tab-btn"
-            :class="{ active: activeFilter === 'video' }"
-            @click="activeFilter = 'video'"
-          >
-            视频
-            <span class="tab-count">{{ videoCount }}</span>
-          </button>
+  <div class="space-y-8">
+    <section class="ui-panel">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="min-w-0">
+          <p class="ui-section-title">媒体画廊</p>
         </div>
-
-        <span class="toolbar-stat">{{ formatSize(totalSize) }}</span>
+        <button
+          class="ui-btn ui-btn-xs ui-btn-primary min-w-14 justify-center"
+          :disabled="isSaving"
+          @click="handleSave"
+        >
+          {{ isSaving ? '保存中...' : '保存设置' }}
+        </button>
       </div>
 
-      <div class="toolbar-right">
-        <div class="expire-box">
-          <span class="expire-label">过期时间</span>
+      <div class="mt-6 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+          <SegmentedTabs
+            v-model="activeFilter"
+            :options="filterOptions"
+            aria-label="媒体分类筛选"
+          />
+
+          <div class="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span class="ui-chip">总文件 {{ counts.all }}</span>
+            <span class="ui-chip">总占用 {{ formatSize(totalSize) }}</span>
+          </div>
+        </div>
+
+        <div class="gallery-setting-row">
+          <span class="text-xs text-muted-foreground">过期时间</span>
           <input
-            type="number"
             v-model.number="expireHoursInput"
+            type="number"
             :min="-1"
             :max="720"
-            class="expire-input"
+            class="ui-input-sm w-16 text-center"
             @keyup.enter="handleSave"
           />
-          <span class="expire-unit">小时</span>
-          <HelpTip text="-1 表示永不自动删除，最小值为 1 小时。过期文件会自动删除！" />
-          <button
-            class="btn-save"
-            @click="handleSave"
-            :disabled="isSaving"
-          >
-            {{ isSaving ? '保存中...' : '保存' }}
+          <span class="text-xs text-muted-foreground">小时</span>
+          <HelpTip text="-1 表示永不自动删除；其余最小值为 1 小时。过期媒体可手动立即清理。" />
+          <button class="ui-btn ui-btn-sm ui-btn-outline" @click="handleCleanupExpired">
+            清理过期
           </button>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 加载状态 -->
-    <div v-if="isLoading" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p class="loading-text">加载中...</p>
-    </div>
-
-    <!-- 空状态 -->
-    <div v-else-if="filteredFiles.length === 0" class="empty-state">
-      <svg viewBox="0 0 24 24" class="empty-icon" fill="currentColor">
-        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-      </svg>
-      <p>暂无{{ activeFilter === 'video' ? '视频' : activeFilter === 'image' ? '图片' : '媒体' }}文件</p>
-    </div>
-
-    <!-- 瀑布流布局 -->
-    <div v-else class="masonry-grid">
-      <div
-        v-for="file in filteredFiles"
-        :key="file.filename"
-        class="masonry-item"
-        :class="{ 'is-expired': file.expired }"
-      >
-        <div class="media-wrapper" @click="openPreview(file)">
-          <img
-            v-if="file.type === 'image'"
-            :src="getFileUrl(file.url)"
-            :alt="file.filename"
-            loading="lazy"
-            class="media-content"
-            @error="handleImageError($event)"
-          />
-          <div v-else class="video-placeholder">
-            <svg viewBox="0 0 24 24" class="play-icon" fill="currentColor">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-            <video
-              :src="getFileUrl(file.url)"
-              preload="metadata"
-              muted
-              class="media-content"
-            ></video>
-          </div>
-
-          <div class="media-overlay">
-            <button class="overlay-btn delete" @click.stop="handleDelete(file)" title="删除">
-              <svg viewBox="0 0 24 24" fill="currentColor" class="btn-icon">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-              </svg>
-            </button>
-            <button class="overlay-btn download" @click.stop="downloadFile(file)" title="下载">
-              <svg viewBox="0 0 24 24" fill="currentColor" class="btn-icon">
-                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-              </svg>
-            </button>
-          </div>
-
-          <div v-if="file.expired" class="expired-badge">已过期</div>
+    <section class="ui-panel !p-0 overflow-hidden">
+      <div class="gallery-content-toolbar">
+        <div>
+          <p class="ui-section-kicker">当前视图</p>
+          <p class="mt-1 text-xs text-muted-foreground">{{ paginationSummary }}</p>
         </div>
 
-        <div class="file-info">
-          <p class="file-name" :title="file.filename">{{ file.filename }}</p>
-          <div class="file-meta">
-            <span class="file-size">{{ formatSize(file.size) }}</span>
-            <Tooltip
-              v-if="file.expires_in_seconds !== null && !file.expired"
-              :text="'将在 ' + formatTimeRemaining(file.expires_in_seconds) + ' 后自动删除'"
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-muted-foreground">每页</span>
+          <SegmentedTabs
+            v-model="pageSize"
+            :options="pageSizeOptions"
+            aria-label="画廊每页数量"
+          />
+        </div>
+      </div>
+
+      <div v-if="!hasLoadedOnce && files.length === 0" class="gallery-state-wrap">
+      </div>
+
+      <div v-else-if="files.length === 0" class="gallery-state-wrap">
+        <svg viewBox="0 0 24 24" class="h-12 w-12 text-muted-foreground/40" fill="currentColor">
+          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+        </svg>
+        <p class="text-sm text-muted-foreground">暂无{{ emptyLabel }}文件</p>
+      </div>
+
+      <div v-else class="space-y-4">
+        <div class="masonry-grid">
+          <div
+            v-for="file in files"
+            :key="file.filename"
+            class="masonry-item"
+            :class="{ 'is-expired': file.expired }"
+          >
+            <div class="media-wrapper" @click="openPreview(file)">
+              <img
+                v-if="file.type === 'image'"
+                :src="getFileUrl(file.url)"
+                :alt="file.filename"
+                loading="lazy"
+                class="media-content"
+                @error="handleImageError($event)"
+              />
+              <div v-else class="video-placeholder">
+                <svg viewBox="0 0 24 24" class="play-icon" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                <video
+                  :src="getFileUrl(file.url)"
+                  preload="metadata"
+                  muted
+                  class="media-content"
+                ></video>
+              </div>
+
+              <div class="media-overlay">
+                <button class="overlay-btn delete" @click.stop="handleDelete(file)" title="删除">
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="btn-icon">
+                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                  </svg>
+                </button>
+                <button class="overlay-btn download" @click.stop="downloadFile(file)" title="下载">
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="btn-icon">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                  </svg>
+                </button>
+              </div>
+
+              <div v-if="file.expired" class="expired-badge">已过期</div>
+            </div>
+
+            <div class="file-info">
+              <p class="file-name" :title="file.filename">{{ file.filename }}</p>
+              <div class="file-meta">
+                <span>{{ formatSize(file.size) }}</span>
+                <Tooltip
+                  v-if="file.expires_in_seconds !== null && !file.expired"
+                  :text="'将在 ' + formatTimeRemaining(file.expires_in_seconds) + ' 后自动删除'"
+                >
+                  <span class="file-countdown">{{ formatTimeRemaining(file.expires_in_seconds) }}</span>
+                </Tooltip>
+                <span class="file-type-badge" :class="file.type">
+                  {{ file.type === 'video' ? '视频' : '图片' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gallery-pagination">
+          <div class="text-xs text-muted-foreground">
+            {{ paginationSummary }}
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center"
+              :disabled="currentPage <= 1 || isLoading"
+              @click="currentPage -= 1"
             >
-              <span class="file-countdown">{{ formatTimeRemaining(file.expires_in_seconds) }}</span>
-            </Tooltip>
-            <span class="file-type-badge" :class="file.type">
-              {{ file.type === 'video' ? '视频' : '图片' }}
-            </span>
+              上一页
+            </button>
+            <span class="ui-chip">{{ currentPage }} / {{ pageCount }}</span>
+            <button
+              class="ui-btn ui-btn-xs ui-btn-outline min-w-14 justify-center"
+              :disabled="currentPage >= pageCount || isLoading"
+              @click="currentPage += 1"
+            >
+              下一页
+            </button>
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Lightbox 预览 -->
     <Teleport to="body">
       <div v-if="previewFile" class="lightbox" @click.self="closePreview">
         <div class="lightbox-content">
@@ -172,7 +198,6 @@
       </div>
     </Teleport>
 
-    <!-- 确认弹窗 -->
     <ConfirmDialog
       :open="confirmDialog.open.value"
       :title="confirmDialog.title.value"
@@ -186,32 +211,79 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import { galleryApi, type GalleryFile } from '@/api/gallery'
 import { settingsApi } from '@/api/settings'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Tooltip from '@/components/ui/Tooltip.vue'
 import HelpTip from '@/components/ui/HelpTip.vue'
+import SegmentedTabs from '@/components/ui/SegmentedTabs.vue'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
+import { useToast } from '@/composables/useToast'
 
-const files = ref<GalleryFile[]>([])
+const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.origin
+const toast = useToast()
+const confirmDialog = useConfirmDialog()
+
+const allFiles = ref<GalleryFile[]>([])
 const totalSize = ref(0)
+const lastLoadedAt = ref(0)
 const expireHoursInput = ref(12)
 const isLoading = ref(true)
+const hasLoadedOnce = ref(false)
 const isSaving = ref(false)
 const previewFile = ref<GalleryFile | null>(null)
 const activeFilter = ref<'all' | 'image' | 'video'>('all')
-const confirmDialog = useConfirmDialog()
+const pageSize = ref(24)
+const currentPage = ref(1)
 
-const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.origin
+const pageSizeOptions = [
+  { label: '24', value: 24 },
+  { label: '48', value: 48 },
+  { label: '96', value: 96 },
+]
 
-const imageCount = computed(() => files.value.filter((f: GalleryFile) => f.type === 'image').length)
-const videoCount = computed(() => files.value.filter((f: GalleryFile) => f.type === 'video').length)
+const counts = computed(() => {
+  const image = allFiles.value.filter((item) => item.type === 'image').length
+  const video = allFiles.value.filter((item) => item.type === 'video').length
+  return {
+    all: allFiles.value.length,
+    image,
+    video,
+  }
+})
+
+const filterOptions = computed(() => [
+  { label: '全部', value: 'all', count: counts.value.all },
+  { label: '图片', value: 'image', count: counts.value.image },
+  { label: '视频', value: 'video', count: counts.value.video },
+])
 
 const filteredFiles = computed(() => {
-  if (activeFilter.value === 'all') return files.value
-  return files.value.filter((f: GalleryFile) => f.type === activeFilter.value)
+  if (activeFilter.value === 'all') return allFiles.value
+  return allFiles.value.filter((item) => item.type === activeFilter.value)
 })
+
+const totalItems = computed(() => filteredFiles.value.length)
+const pageCount = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)))
+
+const files = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredFiles.value.slice(start, start + pageSize.value)
+})
+
+const emptyLabel = computed(() => {
+  switch (activeFilter.value) {
+    case 'image':
+      return '图片'
+    case 'video':
+      return '视频'
+    default:
+      return '媒体'
+  }
+})
+
+const paginationSummary = computed(() => `第 ${currentPage.value} / ${pageCount.value} 页，共 ${totalItems.value} 项`)
 
 function getFileUrl(url: string) {
   return `${apiBaseUrl}${url}`
@@ -221,69 +293,57 @@ async function loadGallery() {
   isLoading.value = true
   try {
     const data = await galleryApi.getFiles()
-    files.value = data.files
-    totalSize.value = data.total_size
+    allFiles.value = data.files || []
+    totalSize.value = data.total_size || 0
     expireHoursInput.value = data.expire_hours
-  } catch (e) {
-    console.error('加载画廊失败:', e)
+    if (currentPage.value > pageCount.value) {
+      currentPage.value = pageCount.value
+    }
+    lastLoadedAt.value = Date.now()
+  } catch (error: any) {
+    toast.error(error?.message || '加载画廊失败', '加载失败')
   } finally {
     isLoading.value = false
+    hasLoadedOnce.value = true
   }
 }
 
 async function handleSave() {
-  // 校验：只允许 -1 或 >= 1 的整数
   const val = expireHoursInput.value
   if (val !== -1 && (val < 1 || !Number.isInteger(val))) {
-    await confirmDialog.ask({
-      title: '输入有误',
-      message: '过期时间只能设置为 -1（永不删除）或 ≥ 1 的整数（小时）',
-      confirmText: '知道了',
-      cancelText: '取消',
-    })
+    toast.warning('过期时间只能设置为 -1 或大于等于 1 的整数小时。', '输入有误')
     return
   }
 
   isSaving.value = true
   try {
-    // 先保存设置
     const settings = await settingsApi.get()
     settings.basic.image_expire_hours = val
     await settingsApi.update(settings)
-
-    // 刷新列表获取最新过期状态
-    const data = await galleryApi.getFiles()
-    files.value = data.files
-    totalSize.value = data.total_size
-    expireHoursInput.value = data.expire_hours
-
-    // 统计过期文件数
-    const expiredImgs = files.value.filter((f: GalleryFile) => f.type === 'image' && f.expired).length
-    const expiredVids = files.value.filter((f: GalleryFile) => f.type === 'video' && f.expired).length
-    const totalExpired = expiredImgs + expiredVids
-
-    if (totalExpired > 0) {
-      // 有过期文件，询问是否立即删除
-      const parts: string[] = []
-      if (expiredImgs > 0) parts.push(`${expiredImgs} 张图片`)
-      if (expiredVids > 0) parts.push(`${expiredVids} 个视频`)
-
-      const doCleanup = await confirmDialog.ask({
-        title: '保存成功',
-        message: `检测到 ${parts.join('、')} 已过期，是否立即删除？`,
-        confirmText: '立即删除',
-        cancelText: '暂不删除',
-      })
-
-      if (doCleanup) {
-        await galleryApi.cleanupExpired()
-        await loadGallery()
-      }
-    }
-  } catch (e) {
-    console.error('保存设置失败:', e)
+    await loadGallery()
+    toast.success('画廊过期设置已保存。', '保存成功')
+  } catch (error: any) {
+    toast.error(error?.message || '保存画廊设置失败', '保存失败')
   } finally {
     isSaving.value = false
+  }
+}
+
+async function handleCleanupExpired() {
+  const confirmed = await confirmDialog.ask({
+    title: '确认清理',
+    message: '确定要立即清理所有已过期媒体吗？此操作不可恢复。',
+    confirmText: '立即清理',
+    cancelText: '取消',
+  })
+  if (!confirmed) return
+
+  try {
+    const result = await galleryApi.cleanupExpired()
+    await loadGallery()
+    toast.success(result.message || '已完成过期媒体清理。', '清理完成')
+  } catch (error: any) {
+    toast.error(error?.message || '清理过期媒体失败', '清理失败')
   }
 }
 
@@ -298,21 +358,25 @@ async function handleDelete(file: GalleryFile) {
 
   try {
     await galleryApi.deleteFile(file.filename)
-    files.value = files.value.filter((f: GalleryFile) => f.filename !== file.filename)
-    totalSize.value -= file.size
-  } catch (e) {
-    console.error('删除失败:', e)
+    allFiles.value = allFiles.value.filter((item) => item.filename !== file.filename)
+    totalSize.value = Math.max(0, totalSize.value - file.size)
+    if (currentPage.value > pageCount.value) {
+      currentPage.value = pageCount.value
+    }
+    toast.success(`已删除 ${file.filename}`, '删除成功')
+  } catch (error: any) {
+    toast.error(error?.message || '删除媒体失败', '删除失败')
   }
 }
 
 function downloadFile(file: GalleryFile) {
-  const a = document.createElement('a')
-  a.href = getFileUrl(file.url)
-  a.download = file.filename
-  a.target = '_blank'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  const anchor = document.createElement('a')
+  anchor.href = getFileUrl(file.url)
+  anchor.download = file.filename
+  anchor.target = '_blank'
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
 }
 
 function openPreview(file: GalleryFile) {
@@ -324,18 +388,17 @@ function closePreview() {
 }
 
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
 function formatTimeRemaining(seconds: number): string {
   if (seconds <= 0) return '已过期'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
 function handleImageError(event: Event) {
@@ -343,243 +406,112 @@ function handleImageError(event: Event) {
   img.style.display = 'none'
 }
 
-onMounted(loadGallery)
+watch([activeFilter, pageSize], () => {
+  currentPage.value = 1
+})
+
+watch(filteredFiles, () => {
+  if (currentPage.value > pageCount.value) {
+    currentPage.value = pageCount.value
+  }
+})
+
+onMounted(() => {
+  void loadGallery()
+})
+
+onActivated(() => {
+  if (!lastLoadedAt.value || Date.now() - lastLoadedAt.value > 30000) {
+    void loadGallery()
+  }
+})
 </script>
 
 <style scoped>
-.gallery-page {
-  padding: 0;
+.gallery-setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-/* ===== 工具栏 ===== */
-.gallery-toolbar {
+.gallery-content-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 12px;
-  padding: 12px 24px;
-  background: hsl(var(--card));
+  padding: 18px 20px;
   border-bottom: 1px solid hsl(var(--border));
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-}
-
-.toolbar-stat {
-  font-size: 12px;
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
-}
-
-/* ===== 筛选标签 ===== */
-.filter-tabs {
-  display: flex;
-  gap: 4px;
-  background: hsl(var(--secondary));
-  border-radius: 999px;
-  padding: 3px;
-}
-
-.tab-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 14px;
-  border: none;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.tab-btn.active {
   background: hsl(var(--card));
-  color: hsl(var(--foreground));
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.tab-btn:hover:not(.active) {
-  color: hsl(var(--foreground));
-}
-
-.tab-count {
-  font-size: 10px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: hsl(var(--border));
-  color: hsl(var(--muted-foreground));
-  line-height: 16px;
-}
-
-.tab-btn.active .tab-count {
-  background: hsl(var(--foreground));
-  color: hsl(var(--card));
-}
-
-/* ===== 过期设置框 ===== */
-.expire-box {
+.gallery-state-wrap {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 999px;
-  background: hsl(var(--background));
-}
-
-.expire-label {
-  font-size: 12px;
-  color: hsl(var(--muted-foreground));
-  white-space: nowrap;
-}
-
-.expire-input {
-  width: 56px;
-  padding: 4px 6px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 999px;
-  font-size: 12px;
-  background: hsl(var(--card));
-  color: hsl(var(--foreground));
-  text-align: center;
-}
-
-.expire-input:focus {
-  outline: none;
-  border-color: hsl(var(--foreground));
-}
-
-.expire-unit {
-  font-size: 11px;
-  color: hsl(var(--muted-foreground));
-}
-
-.btn-save {
-  padding: 5px 14px;
-  border: none;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  background: hsl(var(--foreground));
-  color: hsl(var(--card));
-  cursor: pointer;
-  transition: opacity 0.15s;
-  white-space: nowrap;
-}
-
-.btn-save:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-.btn-save:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ===== 加载 & 空状态 ===== */
-.loading-container {
-  display: flex;
+  min-height: 360px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 80px 20px;
+  gap: 12px;
+  padding: 24px;
 }
 
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid hsl(var(--border));
-  border-top-color: hsl(var(--foreground));
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.loading-text {
-  margin-top: 12px;
-  font-size: 13px;
-  color: hsl(var(--muted-foreground));
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 100px 20px;
-  color: hsl(var(--muted-foreground));
-}
-
-.empty-icon {
-  width: 48px;
-  height: 48px;
-  opacity: 0.3;
-  margin-bottom: 12px;
-}
-
-/* ===== 瀑布流 ===== */
 .masonry-grid {
   columns: 2;
   column-gap: 12px;
-  padding: 16px;
+  padding: 20px;
 }
 
 @media (min-width: 640px) {
-  .masonry-grid { columns: 3; column-gap: 14px; padding: 20px; }
+  .masonry-grid {
+    columns: 3;
+    column-gap: 14px;
+  }
 }
 
 @media (min-width: 1024px) {
-  .masonry-grid { columns: 4; column-gap: 16px; padding: 24px; }
+  .masonry-grid {
+    columns: 4;
+    column-gap: 16px;
+    padding: 24px;
+  }
 }
 
 @media (min-width: 1400px) {
-  .masonry-grid { columns: 5; }
+  .masonry-grid {
+    columns: 5;
+  }
 }
 
 .masonry-item {
   break-inside: avoid;
-  margin-bottom: 12px;
-  border-radius: 12px;
+  margin-bottom: 14px;
   overflow: hidden;
-  background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
+  border-radius: 18px;
+  background: hsl(var(--card));
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .masonry-item:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
 }
 
 .masonry-item.is-expired {
   opacity: 0.6;
 }
 
-/* ===== 媒体内容 ===== */
 .media-wrapper {
   position: relative;
-  cursor: pointer;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .media-content {
-  width: 100%;
   display: block;
+  width: 100%;
   min-height: 80px;
   background: hsl(var(--secondary));
   object-fit: cover;
@@ -593,28 +525,24 @@ onMounted(loadGallery)
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  z-index: 2;
   width: 40px;
   height: 40px;
+  transform: translate(-50%, -50%);
   color: white;
-  z-index: 2;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
   pointer-events: none;
 }
 
-/* ===== 悬浮操作 ===== */
 .media-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
   gap: 6px;
   padding: 8px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, transparent 40%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, transparent 40%);
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -624,14 +552,14 @@ onMounted(loadGallery)
 }
 
 .overlay-btn {
+  display: flex;
   width: 32px;
   height: 32px;
-  display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
   color: hsl(var(--foreground));
   cursor: pointer;
   transition: all 0.15s;
@@ -659,32 +587,31 @@ onMounted(loadGallery)
   left: 8px;
   padding: 2px 8px;
   border-radius: 999px;
+  background: hsl(0 84.2% 60.2%);
   font-size: 10px;
   font-weight: 600;
-  background: hsl(0 84.2% 60.2%);
   color: white;
 }
 
-/* ===== 文件信息 ===== */
 .file-info {
-  padding: 8px 10px 10px;
+  padding: 10px 12px 12px;
 }
 
 .file-name {
-  font-size: 11px;
-  color: hsl(var(--foreground));
-  white-space: nowrap;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  color: hsl(var(--foreground));
 }
 
 .file-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
-  font-size: 10px;
+  margin-top: 6px;
+  font-size: 11px;
   color: hsl(var(--muted-foreground));
 }
 
@@ -695,9 +622,9 @@ onMounted(loadGallery)
 }
 
 .file-type-badge {
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -711,7 +638,15 @@ onMounted(loadGallery)
   color: hsl(280 40% 40%);
 }
 
-/* ===== Lightbox ===== */
+.gallery-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 20px 20px;
+}
+
 .lightbox {
   position: fixed;
   inset: 0;
@@ -719,16 +654,16 @@ onMounted(loadGallery)
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 24px;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(12px);
-  padding: 24px;
 }
 
 .lightbox-content {
   position: relative;
+  display: flex;
   max-width: 90vw;
   max-height: 90vh;
-  display: flex;
   flex-direction: column;
   align-items: center;
 }
@@ -737,13 +672,13 @@ onMounted(loadGallery)
   position: absolute;
   top: -40px;
   right: -8px;
+  display: flex;
   width: 36px;
   height: 36px;
-  display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 50%;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.15);
   color: white;
   cursor: pointer;
@@ -768,6 +703,7 @@ onMounted(loadGallery)
 
 .lightbox-info {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
   margin-top: 12px;
