@@ -379,7 +379,7 @@ logger.addHandler(memory_handler)
 
 # ---------- 配置管理（使用统一配置系统）----------
 # 所有配置通过 config_manager 访问，优先级：环境变量 > YAML > 默认值
-TIMEOUT_SECONDS = 300
+TIMEOUT_SECONDS = max(30, int(getattr(config.basic, "request_timeout_seconds", 600) or 600))
 API_KEY = config.basic.api_key
 ADMIN_KEY = config.security.admin_key
 _proxy_auth, _no_proxy_auth = parse_proxy_setting(config.basic.proxy_for_auth)

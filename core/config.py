@@ -46,6 +46,7 @@ class BasicConfig(BaseModel):
     """基础配置"""
     api_key: str = Field(default="", description="API访问密钥（留空则公开访问，多个密钥用逗号分隔）")
     base_url: str = Field(default="", description="服务器URL（留空则自动检测）")
+    request_timeout_seconds: int = Field(default=600, ge=30, le=3600, description="API 请求超时时间（秒）")
     # DEPRECATED: 代理配置已迁移到节点管理页面的代理控制面板
     proxy_for_auth: str = Field(default="", description="[已弃用] 账户操作代理地址，请使用节点管理页面配置")
     proxy_for_chat: str = Field(default="", description="[已弃用] 对话操作代理地址，请使用节点管理页面配置")
@@ -266,6 +267,7 @@ class ConfigManager:
         basic_config = BasicConfig(
             api_key=basic_data.get("api_key") or "",
             base_url=basic_data.get("base_url") or "",
+            request_timeout_seconds=int(basic_data.get("request_timeout_seconds", 600)),
             proxy_for_auth=str(proxy_for_auth or "").strip(),
             proxy_for_chat=str(proxy_for_chat or "").strip(),
             duckmail_base_url=basic_data.get("duckmail_base_url") or "https://api.duckmail.sbs",

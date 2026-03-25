@@ -44,6 +44,19 @@
                   class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
                   placeholder="自动检测或手动填写"
                 />
+                <div class="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>请求超时（秒）</span>
+                  <HelpTip text="对话与流式响应等待时长。长文本、深度思考或慢速上游建议调大到 600-900 秒。" />
+                </div>
+                <input
+                  v-model.number="localSettings.basic.request_timeout_seconds"
+                  type="number"
+                  min="30"
+                  max="3600"
+                  step="30"
+                  class="w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="600"
+                />
 
                 <!-- 系统代理总开关 -->
                 <div class="flex items-center justify-between gap-2 mt-3">
@@ -587,6 +600,9 @@ watch(settings, (value) => {
   next.basic.duckmail_verify_ssl = next.basic.duckmail_verify_ssl ?? true
   next.basic.browser_engine = next.basic.browser_engine || 'dp'
   next.basic.browser_mode = next.basic.browser_mode || 'normal'
+  next.basic.request_timeout_seconds = Number.isFinite(next.basic.request_timeout_seconds)
+    ? next.basic.request_timeout_seconds
+    : 600
   next.basic.refresh_window_hours = Number.isFinite(next.basic.refresh_window_hours)
     ? next.basic.refresh_window_hours
     : 1

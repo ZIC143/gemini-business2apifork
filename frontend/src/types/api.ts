@@ -84,6 +84,7 @@ export interface Settings {
   basic: {
     api_key?: string
     base_url?: string
+    request_timeout_seconds?: number
     proxy_for_auth?: string
     proxy_for_chat?: string
     duckmail_base_url?: string
