@@ -27,14 +27,40 @@ CHROMIUM_PATHS = [
 ]
 
 # 注册时随机使用的真实英文姓名（避免明显的机器人特征）
-REGISTER_NAMES = [
-    "James Smith", "John Johnson", "Robert Williams", "Michael Brown", "William Jones",
-    "David Garcia", "Mary Miller", "Patricia Davis", "Jennifer Rodriguez", "Linda Martinez",
-    "Barbara Anderson", "Susan Thomas", "Jessica Jackson", "Sarah White", "Karen Harris",
-    "Lisa Martin", "Nancy Thompson", "Betty Garcia", "Margaret Martinez", "Sandra Robinson",
-    "Ashley Clark", "Dorothy Rodriguez", "Emma Lewis", "Olivia Lee", "Ava Walker",
-    "Emily Hall", "Abigail Allen", "Madison Young", "Elizabeth Hernandez", "Charlotte King",
+REGISTER_FIRST_NAMES = [
+    "James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Thomas", "Charles",
+    "Christopher", "Daniel", "Matthew", "Anthony", "Mark", "Donald", "Steven", "Paul", "Andrew", "Joshua",
+    "Kenneth", "Kevin", "Brian", "George", "Edward", "Ronald", "Timothy", "Jason", "Jeffrey", "Ryan",
+    "Jacob", "Gary", "Nicholas", "Eric", "Stephen", "Jonathan", "Larry", "Justin", "Scott", "Brandon",
+    "Benjamin", "Samuel", "Gregory", "Frank", "Alexander", "Raymond", "Patrick", "Jack", "Dennis", "Jerry",
+    "Tyler", "Aaron", "Jose", "Adam", "Nathan", "Henry", "Douglas", "Peter", "Zachary", "Kyle",
+    "Walter", "Ethan", "Jeremy", "Harold", "Keith", "Christian", "Roger", "Noah", "Gerald", "Carl",
+    "Terry", "Sean", "Austin", "Arthur", "Lawrence", "Jesse", "Dylan", "Bryan", "Joe", "Jordan",
+    "Mary", "Patricia", "Jennifer", "Linda", "Barbara", "Susan", "Jessica", "Sarah", "Karen", "Nancy",
+    "Lisa", "Betty", "Margaret", "Sandra", "Ashley", "Dorothy", "Emma", "Olivia", "Ava", "Emily",
+    "Abigail", "Madison", "Elizabeth", "Charlotte", "Sophia", "Mia", "Amelia", "Harper", "Evelyn", "Ella",
+    "Grace", "Chloe", "Victoria", "Riley", "Aria", "Lily", "Aubrey", "Zoey", "Hannah", "Nora",
+    "Lillian", "Addison", "Layla", "Brooklyn", "Scarlett", "Zoe", "Penelope", "Audrey", "Claire", "Skylar",
+    "Lucy", "Anna", "Samantha", "Caroline", "Genesis", "Aaliyah", "Kennedy", "Kinsley", "Allison", "Maya",
 ]
+
+REGISTER_LAST_NAMES = [
+    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
+    "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
+    "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson",
+    "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores",
+    "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts",
+    "Gomez", "Phillips", "Evans", "Turner", "Diaz", "Parker", "Cruz", "Edwards", "Collins", "Reyes",
+    "Stewart", "Morris", "Morales", "Murphy", "Cook", "Rogers", "Gutierrez", "Ortiz", "Morgan", "Cooper",
+    "Peterson", "Bailey", "Reed", "Kelly", "Howard", "Ramos", "Kim", "Cox", "Ward", "Richardson",
+    "Watson", "Brooks", "Chavez", "Wood", "James", "Bennett", "Gray", "Mendoza", "Ruiz", "Hughes",
+    "Price", "Alvarez", "Castillo", "Sanders", "Patel", "Myers", "Long", "Ross", "Foster", "Jimenez",
+]
+
+
+def _generate_register_name() -> str:
+    """生成更丰富的随机英文全名。"""
+    return f"{random.choice(REGISTER_FIRST_NAMES)} {random.choice(REGISTER_LAST_NAMES)}"
 
 # 常见桌面分辨率（避免固定 1280x800 成为指纹）
 COMMON_VIEWPORTS = [
@@ -524,10 +550,7 @@ class GeminiAutomation:
             page.get("https://business.gemini.google/", timeout=self.timeout)
             time.sleep(random.uniform(4, 7))
 
-        # Step 11: 检查是否需要设置用户名（仅登录刷新走此路径，注册已在早期处理）
-        if not is_new_account and "cid" not in page.url:
-            if self._handle_username_setup(page):
-                time.sleep(random.uniform(4, 7))
+        # Step 11: 刷新流程不处理用户名输入页，直接继续后续业务页检测
 
         # Step 12: 再次检测 403（导航后可能出现）
         access_error = self._check_access_restricted(page, email)
@@ -650,7 +673,7 @@ class GeminiAutomation:
     def _verify_code_send_by_network(self, page) -> bool:
         """通过监听网络请求验证验证码是否成功发送"""
         try:
-            time.sleep(1)
+            time.sleep(2)
 
             packets = []
             max_wait_seconds = 6
@@ -751,7 +774,7 @@ class GeminiAutomation:
                 "css:[role='alert']",
                 "css:aside",
             ]
-            for _ in range(6):
+            for _ in range(8):
                 for selector in selectors:
                     try:
                         elements = page.eles(selector, timeout=0.5)
@@ -1059,7 +1082,7 @@ class GeminiAutomation:
             self._log("warning", "⚠️ 30秒内未找到用户名输入框，跳过此步骤")
             return False
 
-        name = random.choice(REGISTER_NAMES)
+        name = _generate_register_name()
         self._log("info", f"✏️ 输入姓名: {name}")
 
         try:

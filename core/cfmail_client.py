@@ -211,7 +211,8 @@ class CloudflareMailClient:
 
         try:
             self._log("info", "📬 正在拉取 CFMail 邮件列表...")
-            res = self._request("GET", f"{self.base_url}/api/mails", params={"limit": 20, "offset": 0})
+            limit = 5
+            res = self._request("GET", f"{self.base_url}/api/mails", params={"limit": limit, "offset": 0})
 
             if res.status_code != 200:
                 self._log("error", f"❌ 获取邮件列表失败: HTTP {res.status_code}")
@@ -220,6 +221,7 @@ class CloudflareMailClient:
             data = res.json() if res.content else {}
             # 响应格式: {"results": [...], "total": N}
             messages = data.get("results", [])
+            total = int(data.get("total", len(messages)) or len(messages)) if isinstance(data, dict) else len(messages)
             if not isinstance(messages, list):
                 messages = []
 
@@ -227,13 +229,31 @@ class CloudflareMailClient:
                 self._log("info", "📭 邮箱为空，暂无邮件")
                 return None
 
-            self._log("info", f"📨 收到 {len(messages)} 封邮件，开始检查验证码...")
+            self._log("info", f"📨 收到 {len(messages)} 封邮件，总数 {total}，开始检查验证码...")
+
+            def _sort_latest_first(items):
+                try:
+                    return sorted(items, key=lambda m: int(m.get("id") or 0), reverse=True)
+                except Exception:
+                    return items
+
+            messages = _sort_latest_first(messages)
+
+            fetched_ids = [int(m.get("id") or 0) for m in messages if str(m.get("id") or "").isdigit()]
+            if fetched_ids and total > len(messages) and max(fetched_ids) < total:
+                latest_offset = max(total - limit, 0)
+                self._log("info", f"📮 检测到首批邮件不是最新页，改为拉取最后一页 (offset={latest_offset}, limit={limit})")
+                latest_res = self._request("GET", f"{self.base_url}/api/mails", params={"limit": limit, "offset": latest_offset})
+                if latest_res.status_code == 200:
+                    latest_data = latest_res.json() if latest_res.content else {}
+                    latest_messages = latest_data.get("results", []) if isinstance(latest_data, dict) else []
+                    if isinstance(latest_messages, list) and latest_messages:
+                        messages = _sort_latest_first(latest_messages)
+                        self._log("info", f"📬 已切换到最新一页，共 {len(messages)} 封")
+                else:
+                    self._log("warning", f"⚠️ 拉取最后一页失败: HTTP {latest_res.status_code}，继续使用当前结果")
 
             # 按 id 降序（新邮件优先）
-            try:
-                messages = sorted(messages, key=lambda m: int(m.get("id") or 0), reverse=True)
-            except Exception:
-                pass
 
             for idx, msg in enumerate(messages, 1):
                 msg_id = msg.get("id")

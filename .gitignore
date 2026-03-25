@@ -53,6 +53,8 @@ old_version.py
 ui/
 cache.db
 clash_config copy.yaml
+clash_config copy 2.yaml
+clash_config copy 3.yaml
 clash_config.yaml
 clash_config_runtime.yaml
 mihomo.exe
